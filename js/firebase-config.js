@@ -20,8 +20,8 @@
    ============================================================ */
 
 window.SUMMIT_FIREBASE_CONFIG = {
-  apiKey: "REPLACE_ME",
-  authDomain: "REPLACE_ME.firebaseapp.com",
-  projectId: "REPLACE_ME",
-  appId: "REPLACE_ME",
+  apiKey: "AIzaSyD2AFRq7WkOWe8KYu7-89AQO7I-moBbtzU",
+  authDomain: "peakbook-3aee4.firebaseapp.com",
+  projectId: "peakbook-3aee4",
+  appId: "1:410263249889:web:51f4ef2ae0065e9e39a8a0",
 };
