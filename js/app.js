@@ -11,7 +11,8 @@ const state = {
   climbs: loadClimbs(),
   view: "dashboard",
   search: "",
-  filter: "all", // all | climbed | unclimbed | <continent>
+  status: "all", // all | climbed | unclimbed
+  filter: "all", // all | <continent> — independent of status, so they combine
   map: null,
   markers: [],
 };
@@ -94,6 +95,15 @@ function esc(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
+// Lowercase and strip accents, so "monch" finds Mönch and "iztaccihuatl" finds Iztaccíhuatl.
+function fold(s) {
+  return String(s).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+}
+
+function peakHaystack(m) {
+  return fold(`${m.name} ${m.country} ${m.range} ${m.continent}`);
+}
+
 /* ============================================================
    Navigation
    ============================================================ */
@@ -135,7 +145,16 @@ function renderDashboard() {
     document.getElementById("dash-subtitle").textContent = "Track the peaks you've climbed.";
     el.innerHTML = `
       <div class="empty-state">
-        <div class="empty-icon">🏔</div>
+        <svg class="empty-art" viewBox="0 0 260 120" fill="none" aria-hidden="true">
+          <path d="M0 104 L42 64 L66 84 L100 46 L148 104 Z" fill="rgba(143,195,232,0.10)"/>
+          <path d="M0 104 L42 64 L66 84 L100 46 L148 104" stroke="rgba(143,195,232,0.35)" stroke-width="1.2"/>
+          <path d="M92 104 L156 26 L182 60 L200 44 L252 104 Z" fill="rgba(255,126,92,0.14)"/>
+          <path d="M92 104 L156 26 L182 60 L200 44 L252 104" stroke="rgba(255,126,92,0.7)" stroke-width="1.4" stroke-linejoin="round"/>
+          <path d="M156 26 L166 38 L159 34 L150 40 Z" fill="rgba(237,239,244,0.75)"/>
+          <path d="M156 25 V13" stroke="#FF7E5C" stroke-width="1.5" stroke-linecap="round"/>
+          <path d="M156 13 L167 16.5 L156 20 Z" fill="#FF7E5C"/>
+          <line x1="0" y1="104.5" x2="260" y2="104.5" stroke="rgba(213,221,235,0.16)"/>
+        </svg>
         <h3>No climbs logged yet</h3>
         <p>Search for a mountain you've summited and add it to your logbook. Your stats, map, and list progress build from there.</p>
         <div class="empty-actions">
@@ -154,14 +173,15 @@ function renderDashboard() {
   const everests = (totalElev / everest).toFixed(1);
 
   document.getElementById("dash-subtitle").textContent =
-    `${peaks.length} peak${peaks.length === 1 ? "" : "s"} · ${fmt.format(totalElev)} m of summits · ${everests}× the height of Everest`;
+    `${peaks.length} peak${peaks.length === 1 ? "" : "s"} logged, ${fmt.format(totalElev)} metres of summits.`;
 
   // Stats
   let html = `
     <div class="stat-hero">
-      <div class="stat-card highlight">
+      <div class="stat-card stat-featured">
+        <div class="stat-kicker">Peaks climbed</div>
         <div class="stat-value">${peaks.length}</div>
-        <div class="stat-label">Peaks climbed</div>
+        <div class="stat-label">${everests}× the height of Everest, stacked end to end</div>
       </div>
       <div class="stat-card">
         <div class="stat-value">${metres(highest.elevation)}</div>
@@ -266,11 +286,11 @@ function climbsPerYearChart(ascents) {
 
 function altitudeBands(peaks) {
   const bands = [
-    { label: "8,000 m+", min: 8000, color: "#9B7BF3" },
-    { label: "6–8,000 m", min: 6000, color: "#5B8DEF" },
-    { label: "4–6,000 m", min: 4000, color: "#3EC7A6" },
-    { label: "2–4,000 m", min: 2000, color: "#F2C14E" },
-    { label: "< 2,000 m", min: 0, color: "#F2784B" },
+    { label: "8,000 m+", min: 8000, color: "#A08CF0" },
+    { label: "6–8,000 m", min: 6000, color: "#7FA9E8" },
+    { label: "4–6,000 m", min: 4000, color: "#53BFC0" },
+    { label: "2–4,000 m", min: 2000, color: "#E3B25F" },
+    { label: "< 2,000 m", min: 0, color: "#FF7E5C" },
   ];
   const counts = bands.map((b, i) => {
     const maxE = i === 0 ? Infinity : bands[i - 1].min;
@@ -303,35 +323,71 @@ function renderExplore() {
 
 function renderFilterChips() {
   const row = document.getElementById("filter-row");
-  const chips = [
+  const statusChips = [
     { id: "all", label: "All" },
     { id: "climbed", label: "✓ Climbed" },
     { id: "unclimbed", label: "Not yet" },
-    ...CONTINENTS.map((c) => ({ id: c, label: c })),
   ];
-  row.innerHTML = chips
-    .map((c) => `<button class="chip ${state.filter === c.id ? "active" : ""}" data-filter="${esc(c.id)}">${esc(c.label)}</button>`)
-    .join("");
-  row.querySelectorAll(".chip").forEach((chip) => {
+  row.innerHTML =
+    statusChips
+      .map((c) => `<button class="chip ${state.status === c.id ? "active" : ""}" data-status="${esc(c.id)}">${esc(c.label)}</button>`)
+      .join("") +
+    `<span class="chip-divider" aria-hidden="true"></span>` +
+    CONTINENTS
+      .map((c) => `<button class="chip ${state.filter === c ? "active" : ""}" data-filter="${esc(c)}">${esc(c)}</button>`)
+      .join("");
+  row.querySelectorAll(".chip[data-status]").forEach((chip) => {
     chip.addEventListener("click", () => {
-      state.filter = chip.dataset.filter;
+      state.status = chip.dataset.status;
+      renderExplore();
+    });
+  });
+  row.querySelectorAll(".chip[data-filter]").forEach((chip) => {
+    chip.addEventListener("click", () => {
+      // Click the active continent again to clear it.
+      state.filter = state.filter === chip.dataset.filter ? "all" : chip.dataset.filter;
       renderExplore();
     });
   });
 }
 
 function filteredPeaks() {
-  const q = state.search.trim().toLowerCase();
+  const q = fold(state.search.trim());
   return MOUNTAINS.filter((m) => {
-    if (state.filter === "climbed" && !isClimbed(m.id)) return false;
-    if (state.filter === "unclimbed" && isClimbed(m.id)) return false;
-    if (CONTINENTS.includes(state.filter) && m.continent !== state.filter) return false;
-    if (q) {
-      const hay = `${m.name} ${m.country} ${m.range} ${m.continent}`.toLowerCase();
-      if (!hay.includes(q)) return false;
-    }
+    if (state.status === "climbed" && !isClimbed(m.id)) return false;
+    if (state.status === "unclimbed" && isClimbed(m.id)) return false;
+    if (state.filter !== "all" && m.continent !== state.filter) return false;
+    if (q && !peakHaystack(m).includes(q)) return false;
     return true;
   }).sort((a, b) => b.elevation - a.elevation);
+}
+
+// A small ridge-line silhouette for the bottom of each peak card.
+// Peak height scales with real elevation; the shape varies per mountain.
+function ridgeSVG(m) {
+  const climbed = isClimbed(m.id);
+  const W = 260, H = 58;
+  const hash = [...m.id].reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 7);
+  const rel = Math.pow(Math.min(1, m.elevation / 8849), 0.65);
+  const apexX = 70 + (hash % 130);
+  const apexY = Math.round(H - 8 - rel * (H - 18));
+  const leftY = H - 10 - (hash % 8);
+  const midX = Math.round(apexX * 0.45);
+  const midY = Math.round((leftY + apexY) / 2 + 7);
+  const shX = Math.min(W - 30, apexX + 30 + (hash % 26));
+  const shY = Math.round(apexY + (H - apexY) * 0.5);
+  const rightY = H - 8 - ((hash >> 3) % 8);
+  const line = `0,${leftY} ${midX},${midY} ${apexX},${apexY} ${shX},${shY} ${W},${rightY}`;
+  const rgb = climbed ? "82, 199, 154" : "148, 158, 176";
+  return `
+    <svg class="peak-ridge" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">
+      <polygon points="${line} ${W},${H} 0,${H}" fill="rgba(${rgb}, ${climbed ? 0.08 : 0.045})"></polygon>
+      <polyline points="${line}" fill="none" stroke="rgba(${rgb}, ${climbed ? 0.45 : 0.24})" stroke-width="1.2" vector-effect="non-scaling-stroke"></polyline>
+    </svg>`;
+}
+
+function listGlyph(l) {
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="${l.color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m8 3 4 8 5-5 5 15H2L8 3z"/></svg>`;
 }
 
 function peakListDots(m) {
@@ -344,17 +400,22 @@ function renderPeakGrid() {
   const grid = document.getElementById("peak-grid");
   const peaks = filteredPeaks();
   if (!peaks.length) {
-    grid.innerHTML = `<div class="no-results">No mountains match. Try a different search.</div>`;
+    const msg = state.status === "climbed" && !climbedPeaks().length
+      ? "Nothing climbed yet — log your first ascent and it'll show up here."
+      : "No mountains match. Try a different search.";
+    grid.innerHTML = `<div class="no-results">${msg}</div>`;
     return;
   }
   grid.innerHTML = peaks
     .map((m) => {
-      const climbed = isClimbed(m.id);
+      const n = (state.climbs[m.id] || []).length;
+      const climbed = n > 0;
       return `
       <div class="peak-card ${climbed ? "climbed" : ""}" onclick="openPeak('${m.id}')">
+        ${ridgeSVG(m)}
         <div class="peak-card-top">
           <span class="peak-flag">${m.flag}</span>
-          ${climbed ? `<span class="climbed-badge">✓ Climbed</span>` : ""}
+          ${climbed ? `<span class="climbed-badge">✓ Climbed${n > 1 ? ` ×${n}` : ""}</span>` : ""}
         </div>
         <div class="peak-name">${esc(m.name)}</div>
         <div class="peak-meta">${esc(m.range)} · ${esc(m.country)}</div>
@@ -440,7 +501,7 @@ function renderLists() {
         return `
         <div class="list-card ${complete ? "complete" : ""}" onclick="openList('${l.id}')">
           <div class="list-card-head">
-            <div class="list-icon" style="background:${l.color}22">${l.icon}</div>
+            <div class="list-icon" style="background:${l.color}1c">${listGlyph(l)}</div>
             <div>
               <div class="list-title">${esc(l.name)} ${complete ? '<span class="complete-tag">Complete</span>' : ""}</div>
               <div class="list-tagline">${esc(l.tagline)}</div>
@@ -469,6 +530,7 @@ function closeModal() {
   backdrop.hidden = true;
   modalEl.innerHTML = "";
   state.openPeakId = null;
+  state.fromListId = null;
 }
 
 backdrop.addEventListener("click", (e) => {
@@ -476,21 +538,36 @@ backdrop.addEventListener("click", (e) => {
 });
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && !backdrop.hidden) closeModal();
+  // "/" jumps to Explore search from anywhere (unless already typing somewhere).
+  if (e.key === "/" && backdrop.hidden) {
+    const t = e.target;
+    if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT")) return;
+    e.preventDefault();
+    switchView("explore");
+    document.getElementById("search-input").focus();
+  }
 });
 
 /* ---------- Peak detail ---------- */
 
-function openPeak(id) {
+function openPeak(id, fromListId) {
   const m = byId[id];
   if (!m) return;
   state.openPeakId = id;
-  const ascents = (state.climbs[id] || []).slice().sort((a, b) => b.date.localeCompare(a.date));
+  state.fromListId = fromListId || null;
+  // Keep each ascent's index in the stored array so "Remove" deletes the right one
+  // even though we display them date-sorted.
+  const ascents = (state.climbs[id] || [])
+    .map((a, idx) => ({ ...a, idx }))
+    .sort((a, b) => b.date.localeCompare(a.date));
+  const fromList = fromListId ? PEAK_LISTS.find((l) => l.id === fromListId) : null;
   const lists = PEAK_LISTS.filter((l) => l.peaks.includes(id));
   const today = new Date().toISOString().slice(0, 10);
 
   openModal(`
     <div class="modal-hero">
       <button class="modal-close" onclick="closeModal()">✕</button>
+      ${fromList ? `<button class="modal-back" onclick="openList('${fromList.id}')">← ${esc(fromList.name)}</button>` : ""}
       <div class="modal-flag">${m.flag}</div>
       <div class="modal-title">${esc(m.name)}</div>
       <div class="modal-sub">${esc(m.range)} · ${esc(m.country)} · ${esc(m.continent)}</div>
@@ -505,18 +582,18 @@ function openPeak(id) {
       ${lists.length ? `
         <div class="modal-section-title">On these lists</div>
         <div class="modal-list-badges">
-          ${lists.map((l) => `<span class="list-badge" style="background:${l.color}22; color:${l.color}">${l.icon} ${esc(l.name)}</span>`).join("")}
+          ${lists.map((l) => `<span class="list-badge" style="background:${l.color}1c; color:${l.color}">${listGlyph(l)} ${esc(l.name)}</span>`).join("")}
         </div>` : ""}
 
       ${ascents.length ? `
         <div class="modal-section-title">Your ascents</div>
-        ${ascents.map((a, i) => `
+        ${ascents.map((a) => `
           <div class="ascent-row">
             <div>
-              <div class="ascent-date">⛳ ${formatDate(a.date)}</div>
+              <div class="ascent-date">${formatDate(a.date)}</div>
               ${a.note ? `<div class="ascent-note">${esc(a.note)}</div>` : ""}
             </div>
-            <button class="ascent-delete" onclick="deleteAscent('${id}', ${i})">Remove</button>
+            <button class="ascent-delete" onclick="deleteAscent('${id}', ${a.idx})">Remove</button>
           </div>`).join("")}` : ""}
 
       <div class="modal-section-title">${ascents.length ? "Log another ascent" : "Log an ascent"}</div>
@@ -554,7 +631,7 @@ function deleteAscent(id, index) {
   if (!list.length) delete state.climbs[id];
   saveClimbs();
   render();
-  openPeak(id); // refresh the modal in place
+  openPeak(id, state.fromListId); // refresh the modal in place
 }
 
 function celebrate(id) {
@@ -564,9 +641,9 @@ function celebrate(id) {
     return l.peaks.includes(id) && p.done === p.total;
   });
   if (completed.length) {
-    toast(`🎉 ${completed[0].name} complete! ${m.name} logged.`);
+    toast(`${completed[0].name} complete — ${m.name} logged 🎉`);
   } else {
-    toast(`⛰ ${m.name} added to your logbook`);
+    toast(`${m.name} added to your logbook`);
   }
 }
 
@@ -576,13 +653,14 @@ function openList(id) {
   const l = PEAK_LISTS.find((x) => x.id === id);
   if (!l) return;
   state.openPeakId = null;
+  state.fromListId = null;
   const p = listProgress(l);
   const peaks = l.peaks.map((pid) => byId[pid]).sort((a, b) => b.elevation - a.elevation);
 
   openModal(`
     <div class="modal-hero" style="background: linear-gradient(160deg, ${l.color}26, transparent 60%)">
       <button class="modal-close" onclick="closeModal()">✕</button>
-      <div class="modal-flag">${l.icon}</div>
+      <div class="modal-flag"><div class="list-icon" style="background:${l.color}1f">${listGlyph(l)}</div></div>
       <div class="modal-title">${esc(l.name)}</div>
       <div class="modal-sub">${esc(l.tagline)}${l.note ? `. ${esc(l.note)}` : ""}</div>
       <div class="modal-facts">
@@ -594,7 +672,7 @@ function openList(id) {
     <div class="modal-body">
       <div class="list-peaks">
         ${peaks.map((m) => `
-          <div class="list-peak-row ${isClimbed(m.id) ? "done" : ""}" onclick="openPeak('${m.id}')">
+          <div class="list-peak-row ${isClimbed(m.id) ? "done" : ""}" onclick="openPeak('${m.id}', '${l.id}')">
             <div class="check-circle">✓</div>
             <div class="list-peak-name">${m.flag} ${esc(m.name)}</div>
             <div class="list-peak-elev">${fmt.format(m.elevation)} m</div>
@@ -625,24 +703,28 @@ function openPicker() {
   const input = document.getElementById("picker-input");
   const results = document.getElementById("picker-results");
 
+  let topMatch = null;
   function renderResults() {
-    const q = input.value.trim().toLowerCase();
-    const matches = MOUNTAINS.filter((m) => {
-      if (!q) return true;
-      return `${m.name} ${m.country} ${m.range}`.toLowerCase().includes(q);
-    })
+    const q = fold(input.value.trim());
+    const matches = MOUNTAINS.filter((m) => !q || peakHaystack(m).includes(q))
       .sort((a, b) => b.elevation - a.elevation)
       .slice(0, 12);
-    results.innerHTML = matches
-      .map((m) => `
-        <div class="picker-row" onclick="openPeak('${m.id}')">
-          <span class="picker-flag">${m.flag}</span>
-          <span class="picker-name">${esc(m.name)}${isClimbed(m.id) ? ' <span style="color:var(--green)">✓</span>' : ""}</span>
-          <span class="picker-elev">${fmt.format(m.elevation)} m</span>
-        </div>`)
-      .join("");
+    topMatch = matches[0] || null;
+    results.innerHTML = matches.length
+      ? matches
+          .map((m) => `
+            <div class="picker-row" onclick="openPeak('${m.id}')">
+              <span class="picker-flag">${m.flag}</span>
+              <span class="picker-name">${esc(m.name)}${isClimbed(m.id) ? ' <span style="color:var(--green)">✓</span>' : ""}</span>
+              <span class="picker-elev">${fmt.format(m.elevation)} m</span>
+            </div>`)
+          .join("")
+      : `<div class="no-results" style="padding:30px 0">No mountains match.</div>`;
   }
   input.addEventListener("input", renderResults);
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && topMatch) openPeak(topMatch.id);
+  });
   renderResults();
   input.focus();
 }
@@ -682,7 +764,7 @@ function seedDemo() {
   };
   saveClimbs();
   render();
-  toast("⛰ Demo logbook loaded · 15 climbs");
+  toast("Demo logbook loaded — 15 climbs");
 }
 
 document.getElementById("btn-export").addEventListener("click", () => {
@@ -708,11 +790,23 @@ document.getElementById("import-file").addEventListener("change", (e) => {
     try {
       const data = JSON.parse(reader.result);
       const climbs = data.climbs || data;
-      if (typeof climbs !== "object" || Array.isArray(climbs)) throw new Error("bad format");
-      state.climbs = climbs;
+      if (typeof climbs !== "object" || Array.isArray(climbs) || climbs === null) throw new Error("bad format");
+      // Keep only entries that look like real ascents of known mountains.
+      const clean = {};
+      for (const [id, list] of Object.entries(climbs)) {
+        if (!byId[id] || !Array.isArray(list)) continue;
+        const ascents = list
+          .filter((a) => a && typeof a.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(a.date))
+          .map((a) => ({ date: a.date, note: typeof a.note === "string" ? a.note : "" }));
+        if (ascents.length) clean[id] = ascents;
+      }
+      if (!Object.keys(clean).length) throw new Error("no valid climbs");
+      const existing = Object.keys(state.climbs).length;
+      if (existing && !confirm(`Replace your current logbook (${existing} peak${existing === 1 ? "" : "s"}) with this file (${Object.keys(clean).length} peaks)?`)) return;
+      state.climbs = clean;
       saveClimbs();
       render();
-      toast("Logbook imported");
+      toast(`Logbook imported — ${Object.keys(clean).length} peak${Object.keys(clean).length === 1 ? "" : "s"}`);
     } catch {
       toast("⚠️ Couldn't read that file");
     }
@@ -737,7 +831,7 @@ window.peakbookApp = {
     state.climbs = climbs && typeof climbs === "object" ? climbs : {};
     writeLocal();
     render();
-    if (state.openPeakId && !backdrop.hidden) openPeak(state.openPeakId);
+    if (state.openPeakId && !backdrop.hidden) openPeak(state.openPeakId, state.fromListId);
   },
 };
 

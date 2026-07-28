@@ -25,7 +25,7 @@ Then open http://localhost:8420.
 ## Structure
 
 - `index.html`: page structure, navigation, modal & toast containers
-- `css/style.css`: the design system (dark, card-based, Flighty-inspired)
+- `css/style.css`: the design system (alpine-night dark theme, alpenglow accent, Fraunces + Inter type)
 - `js/data.js`: mountain dataset and curated peak lists
 - `js/app.js`: state, rendering, map, and logbook logic
 
