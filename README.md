@@ -1,4 +1,4 @@
-# Summit 🏔
+# Peakbook 🏔
 
 A simple website for tracking the mountains you've climbed, inspired by flight-tracking apps like Flighty.
 
@@ -31,5 +31,5 @@ Then open http://localhost:8420.
 
 ## Notes
 
-- Data model: `{ [mountainId]: [{ date, note }] }` under the `summit.climbs` localStorage key, kept deliberately simple so it can move to a backend or native app later.
+- Data model: `{ [mountainId]: [{ date, note }] }` under the `peakbook.climbs` localStorage key, kept deliberately simple so it can move to a backend or native app later.
 - The only external dependencies are Leaflet (CDN) and CARTO map tiles; everything else is vanilla HTML/CSS/JS.

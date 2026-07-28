@@ -1,5 +1,5 @@
 /* ============================================================
-   Summit: Firebase configuration
+   Peakbook: Firebase configuration
 
    Paste your own Firebase web-app config below to turn on
    "Sign in with Google" and cross-device cloud sync.
@@ -19,7 +19,7 @@
    Step-by-step setup lives in SETUP.md.
    ============================================================ */
 
-window.SUMMIT_FIREBASE_CONFIG = {
+window.PEAKBOOK_FIREBASE_CONFIG = {
   apiKey: "AIzaSyD2AFRq7WkOWe8KYu7-89AQO7I-moBbtzU",
   authDomain: "peakbook-3aee4.firebaseapp.com",
   projectId: "peakbook-3aee4",

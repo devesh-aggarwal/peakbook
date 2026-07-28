@@ -1,10 +1,11 @@
 /* ============================================================
-   Summit: app logic
-   State lives in localStorage under "summit.climbs".
+   Peakbook: app logic
+   State lives in localStorage under "peakbook.climbs".
    climbs = { [mountainId]: [{ date: "YYYY-MM-DD", note: "" }] }
    ============================================================ */
 
-const STORAGE_KEY = "summit.climbs";
+const STORAGE_KEY = "peakbook.climbs";
+const LEGACY_STORAGE_KEY = "summit.climbs"; // the app's former name
 
 const state = {
   climbs: loadClimbs(),
@@ -21,7 +22,17 @@ const byId = Object.fromEntries(MOUNTAINS.map((m) => [m.id, m]));
 
 function loadClimbs() {
   try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY)) || {};
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored) return JSON.parse(stored) || {};
+    // One-time carry-over from the pre-rename key, so nobody loses a logbook.
+    const legacy = localStorage.getItem(LEGACY_STORAGE_KEY);
+    if (legacy) {
+      const climbs = JSON.parse(legacy) || {};
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(climbs));
+      localStorage.removeItem(LEGACY_STORAGE_KEY);
+      return climbs;
+    }
+    return {};
   } catch {
     return {};
   }
@@ -35,8 +46,8 @@ function writeLocal() {
 // auth module is connected and signed in, pushes to the cloud.
 function saveClimbs() {
   writeLocal();
-  if (window.summitSync && typeof window.summitSync.push === "function") {
-    window.summitSync.push(state.climbs);
+  if (window.peakbookSync && typeof window.peakbookSync.push === "function") {
+    window.peakbookSync.push(state.climbs);
   }
 }
 
@@ -675,11 +686,11 @@ function seedDemo() {
 }
 
 document.getElementById("btn-export").addEventListener("click", () => {
-  const blob = new Blob([JSON.stringify({ app: "summit", version: 1, climbs: state.climbs }, null, 2)], { type: "application/json" });
+  const blob = new Blob([JSON.stringify({ app: "peakbook", version: 1, climbs: state.climbs }, null, 2)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `summit-logbook-${new Date().toISOString().slice(0, 10)}.json`;
+  a.download = `peakbook-logbook-${new Date().toISOString().slice(0, 10)}.json`;
   a.click();
   URL.revokeObjectURL(url);
   toast("Logbook exported");
@@ -714,7 +725,7 @@ document.getElementById("import-file").addEventListener("change", (e) => {
    Bridge for the auth / cloud-sync module (js/auth.js)
    ============================================================ */
 
-window.summitApp = {
+window.peakbookApp = {
   // Read the current logbook (used to merge local climbs into the cloud
   // the first time someone signs in).
   getClimbs() {

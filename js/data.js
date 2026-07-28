@@ -1,5 +1,5 @@
 /* ============================================================
-   Summit: mountain dataset & curated lists
+   Peakbook: mountain dataset & curated lists
    Elevations in metres. Coordinates WGS84.
    ============================================================ */
 

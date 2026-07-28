@@ -13,20 +13,20 @@ a database with one small security rule.
 ## 1. Create a Firebase project
 
 1. Go to https://console.firebase.google.com and sign in with your Google account.
-2. Click **Add project**, name it (e.g. `summit`), and finish. You can skip Google Analytics.
+2. Click **Add project**, name it (e.g. `peakbook`), and finish. You can skip Google Analytics.
 
 ## 2. Register a web app and copy the config
 
 1. On the project home, click the **web icon** `</>` ("Add app").
-2. Give it a nickname (e.g. `summit-web`) and click **Register app**. You don't need Firebase Hosting.
+2. Give it a nickname (e.g. `peakbook-web`) and click **Register app**. You don't need Firebase Hosting.
 3. You'll see a `firebaseConfig` object. Copy the values.
 4. Open `js/firebase-config.js` in this project and paste them in, replacing the `REPLACE_ME` placeholders:
 
    ```js
-   window.SUMMIT_FIREBASE_CONFIG = {
+   window.PEAKBOOK_FIREBASE_CONFIG = {
      apiKey: "AIza...your value...",
-     authDomain: "summit-xxxx.firebaseapp.com",
-     projectId: "summit-xxxx",
+     authDomain: "peakbook-xxxx.firebaseapp.com",
+     projectId: "peakbook-xxxx",
      appId: "1:1234567890:web:abcdef...",
    };
    ```
@@ -71,7 +71,7 @@ So the Google popup is allowed to run on your live site:
 1. Go to **Authentication > Settings > Authorized domains**.
 2. Click **Add domain** and add each domain the site runs on, for example:
    - `peakbook.co`
-   - your Vercel domain, e.g. `summit-xxxx.vercel.app`
+   - your Vercel domain, e.g. `peakbook-xxxx.vercel.app`
 
    `localhost` is already there for local testing.
 
