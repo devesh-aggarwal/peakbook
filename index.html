@@ -114,6 +114,10 @@
             <button class="primary-btn" id="btn-log-climb">+ Log a climb</button>
           </div>
         </header>
+        <div class="unit-row unit-row-mobile">
+          <span class="unit-row-label">Elevation</span>
+          <div class="unit-toggle" role="group" aria-label="Elevation units"></div>
+        </div>
         <div id="dashboard-content"></div>
       </section>
 
@@ -130,7 +134,12 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.8-3.8"/></svg>
             <input type="search" id="search-input" placeholder="Search mountains, ranges, countries…" autocomplete="off" />
           </div>
-          <!-- Also here, not just the sidebar: the sidebar is hidden on mobile. -->
+          <!-- Compact copy of the sidebar's toggle, inline with the search box.
+               On mobile it gives way to the labelled row below. -->
+          <div class="unit-toggle unit-toggle-inline" role="group" aria-label="Elevation units"></div>
+        </div>
+        <div class="unit-row unit-row-mobile">
+          <span class="unit-row-label">Elevation</span>
           <div class="unit-toggle" role="group" aria-label="Elevation units"></div>
         </div>
         <div class="filter-row" id="filter-row"></div>
@@ -149,6 +158,10 @@
             <input type="checkbox" id="map-show-all" checked />
             <span>Show unclimbed peaks</span>
           </label>
+          <div class="map-unit">
+            <span>Elevation</span>
+            <div class="unit-toggle" role="group" aria-label="Elevation units"></div>
+          </div>
         </div>
         <div class="map-stats" id="map-stats"></div>
       </section>
@@ -166,6 +179,10 @@
             <p class="subtitle">The classic collections, and your progress on each</p>
           </div>
         </header>
+        <div class="unit-row unit-row-mobile">
+          <span class="unit-row-label">Elevation</span>
+          <div class="unit-toggle" role="group" aria-label="Elevation units"></div>
+        </div>
         <div id="lists-content"></div>
       </section>
 
