@@ -208,6 +208,28 @@ h1, .display {
   transition: color 0.15s, background 0.15s;
 }
 .ghost-btn:hover { color: var(--text-secondary); background: rgba(213, 221, 235, 0.04); }
+a.ghost-btn { display: block; text-decoration: none; }
+
+/* Elevation unit toggle (m / ft) */
+.unit-row {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 8px; padding: 3px 12px 7px;
+}
+.unit-row-label { font-size: 12px; font-weight: 500; color: var(--text-tertiary); }
+.unit-toggle {
+  display: inline-flex; flex: none; gap: 2px; padding: 2px;
+  background: rgba(213, 221, 235, 0.05);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.unit-toggle button {
+  font: inherit; font-size: 12px; font-weight: 600; line-height: 1;
+  padding: 5px 11px; border: none; border-radius: 6px;
+  background: none; color: var(--text-tertiary); cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+}
+.unit-toggle button:hover { color: var(--text-secondary); }
+.unit-toggle button.active { background: rgba(255, 126, 92, 0.16); color: var(--accent); }
 
 /* ============ Main column ============ */
 
@@ -461,7 +483,8 @@ h1, .display {
 
 /* ============ Explore ============ */
 
-.search-row { margin-bottom: 14px; }
+.search-row { margin-bottom: 14px; display: flex; align-items: center; gap: 10px; }
+.search-row .search-box { flex: 1; min-width: 0; }
 .search-box {
   display: flex; align-items: center; gap: 11px;
   background: var(--card);
@@ -816,6 +839,8 @@ h1, .display {
   letter-spacing: -0.01em;
 }
 .fact .fact-label { font-size: 10px; color: var(--text-tertiary); font-weight: 700; text-transform: uppercase; letter-spacing: 0.09em; margin-top: 3px; }
+/* Unit symbols are case-sensitive, so they opt out of the label's uppercasing. */
+.unit-literal { text-transform: none; margin-left: 0.28em; }
 .modal-body { padding: 20px 26px 26px; }
 .modal-section-title {
   font-size: 11px; font-weight: 700;
@@ -878,6 +903,163 @@ h1, .display {
 .picker-flag { font-size: 19px; }
 .picker-name { font-size: 14px; font-weight: 550; flex: 1; }
 .picker-elev { font-size: 12px; color: var(--text-tertiary); font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* ============ Header actions ============ */
+
+.header-actions { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+a.secondary-btn { text-decoration: none; display: inline-block; color: var(--text); }
+
+/* ============ Share modal ============ */
+
+.share-status {
+  text-align: center;
+  padding: 26px 0;
+  color: var(--text-tertiary);
+  font-family: var(--font-display); font-style: italic;
+  font-size: 15px;
+}
+.share-blurb { font-size: 13.5px; color: var(--text-secondary); line-height: 1.6; margin-bottom: 16px; }
+.share-blurb strong { color: var(--text); }
+.share-link-row { display: flex; gap: 8px; margin-bottom: 14px; }
+.share-link {
+  flex: 1; min-width: 0;
+  background: var(--card);
+  border: 1px solid var(--border-strong);
+  border-radius: 11px;
+  padding: 10px 13px;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  outline: none;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.share-link:focus { border-color: rgba(255, 126, 92, 0.55); color: var(--text); }
+.share-actions { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.share-stop {
+  font-size: 12.5px; font-weight: 600;
+  color: var(--text-tertiary);
+  padding: 8px 12px;
+  border-radius: 9px;
+  transition: color 0.15s, background 0.15s;
+}
+.share-stop:hover { color: var(--red); background: rgba(232, 106, 126, 0.09); }
+.modal .share-blurb + .primary-btn { margin-top: 4px; }
+
+/* ============ Shared profile (climbing resume) ============ */
+
+/* Viewing someone's resume: the app chrome disappears entirely. */
+body.share-mode .sidebar,
+body.share-mode .tabbar { display: none; }
+body.share-mode .main { padding-bottom: 0; }
+
+.resume { padding-bottom: 30px; }
+
+.resume-topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 40px;
+}
+.resume-brand {
+  display: flex; align-items: center; gap: 10px;
+  text-decoration: none;
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: 19px; font-weight: 600;
+  letter-spacing: -0.015em;
+}
+.resume-brand .brand-mark { width: 30px; height: 30px; border-radius: 9px; }
+.resume-brand .brand-mark svg { width: 15px; height: 15px; }
+
+.resume-hero {
+  display: flex; align-items: center; gap: 20px;
+  margin-bottom: 30px;
+}
+.resume-hero h1 { font-size: 38px; line-height: 1.08; }
+.resume-hero .subtitle { margin-top: 6px; }
+.resume-avatar {
+  width: 74px; height: 74px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  object-fit: cover;
+  background: var(--card-hover);
+  border: 2px solid var(--border-strong);
+}
+.resume-avatar.fallback {
+  display: grid; place-items: center;
+  font-family: var(--font-display);
+  font-size: 26px; font-weight: 600;
+  color: #2B120A;
+  background: linear-gradient(160deg, #FF9678, #F55D33);
+  border: none;
+}
+
+.resume-stats { margin-bottom: 34px; }
+
+.resume-map {
+  height: 420px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border-strong);
+  overflow: hidden;
+  background: #090b0f;
+}
+
+.ring-card.static { cursor: default; }
+.ring-card.static:hover { background: var(--card); border-color: var(--border); transform: none; }
+
+.resume-year { display: grid; grid-template-columns: 64px 1fr; gap: 14px; margin-bottom: 14px; }
+.resume-year-label {
+  font-family: var(--font-display);
+  font-size: 19px; font-weight: 580;
+  color: var(--text-tertiary);
+  padding-top: 18px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.resume-year-card { padding: 8px 18px; }
+.resume-ascent {
+  display: flex; align-items: center; gap: 13px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+}
+.resume-ascent:last-child { border-bottom: none; }
+.resume-ascent .timeline-meta em { font-style: italic; color: var(--text-tertiary); }
+.resume-ascent-right { text-align: right; flex-shrink: 0; }
+.resume-ascent-date { font-size: 11px; color: var(--text-tertiary); margin-top: 3px; font-variant-numeric: tabular-nums; }
+
+.resume-message {
+  text-align: center;
+  padding: 70px 20px;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: var(--card);
+}
+.resume-message h3 {
+  font-family: var(--font-display);
+  font-size: 23px; font-weight: 560;
+  margin-bottom: 8px;
+}
+.resume-message p { color: var(--text-secondary); font-size: 14px; max-width: 420px; margin: 0 auto 22px; line-height: 1.55; }
+.resume-message p:last-child { margin-bottom: 0; }
+
+.resume-footer {
+  margin-top: 44px;
+  padding-top: 22px;
+  border-top: 1px solid var(--border);
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-tertiary);
+}
+.resume-footer a { color: var(--accent); text-decoration: none; font-weight: 600; }
+.resume-footer a:hover { text-decoration: underline; text-underline-offset: 3px; }
+
+@media (max-width: 760px) {
+  .resume-hero { gap: 14px; }
+  .resume-hero h1 { font-size: 26px; }
+  .resume-avatar { width: 56px; height: 56px; }
+  .resume-avatar.fallback { font-size: 20px; }
+  .resume-map { height: 300px; }
+  .resume-year { grid-template-columns: 1fr; gap: 6px; }
+  .resume-year-label { text-align: left; padding-top: 0; }
+}
 
 /* ============ Toast ============ */
 

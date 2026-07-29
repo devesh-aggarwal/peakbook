@@ -16,12 +16,48 @@
 
 const accountAreas = () => document.querySelectorAll(".account-area");
 
+// Same param app.js reads: when present we're viewing someone's shared resume.
+const VIEWED_SHARE_UID = new URLSearchParams(location.search).get("u");
+
 /* Placeholder handlers so the buttons never throw before init finishes. */
 window.peakbookAuth = {
-  signIn() {
+  async signIn() {
     if (window.toast) window.toast("Add your Firebase config in js/firebase-config.js to enable sign-in. See SETUP.md.");
   },
   signOut() {},
+};
+
+/* ---------- profile sharing state ----------
+   The real implementations are installed by init() once Firebase is up.
+   share.ready resolves as soon as we know whether the visitor is signed in
+   and whether their profile is currently published, so the Share modal
+   never shows a stale answer. */
+const share = {
+  configured: false,
+  ready: null,
+  signedIn: false,
+  shared: false,
+  uid: null,
+  enableImpl: null,
+  disableImpl: null,
+};
+
+window.peakbookShare = {
+  async getState() {
+    if (share.ready) await share.ready;
+    return { configured: share.configured, signedIn: share.signedIn, shared: share.shared, uid: share.uid };
+  },
+  async enable() {
+    if (!share.enableImpl) throw new Error("sharing unavailable");
+    return share.enableImpl();
+  },
+  async disable() {
+    if (!share.disableImpl) throw new Error("sharing unavailable");
+    return share.disableImpl();
+  },
+  url(uid) {
+    return `${location.origin}${location.pathname}?u=${encodeURIComponent(uid || share.uid || "")}`;
+  },
 };
 
 /* ---------- small helpers ---------- */
@@ -95,15 +131,23 @@ renderSignedOut();
 
 const cfg = window.PEAKBOOK_FIREBASE_CONFIG;
 const configured = cfg && !JSON.stringify(cfg).includes("REPLACE_ME");
+share.configured = !!configured;
 
 if (configured) {
   init().catch((err) => {
     console.error("Peakbook: cloud sync failed to start", err);
+    if (share._readyResolve) share._readyResolve();
     if (window.toast) window.toast("⚠️ Cloud sync could not start — check your Firebase config");
+    if (VIEWED_SHARE_UID && window.peakbookApp) window.peakbookApp.sharedProfileError("error");
   });
+} else if (VIEWED_SHARE_UID && window.peakbookApp) {
+  // A shared link was opened on a copy of the app with no cloud config.
+  window.peakbookApp.sharedProfileError("unconfigured");
 }
 
 async function init() {
+  share.ready = new Promise((resolve) => (share._readyResolve = resolve));
+
   const V = "10.12.2";
   const base = `https://www.gstatic.com/firebasejs/${V}`;
   const [appMod, authMod, fsMod] = await Promise.all([
@@ -114,14 +158,30 @@ async function init() {
 
   const { initializeApp } = appMod;
   const { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } = authMod;
-  const { getFirestore, doc, getDoc, setDoc, onSnapshot } = fsMod;
+  const { getFirestore, doc, getDoc, setDoc, deleteDoc, onSnapshot } = fsMod;
 
   const app = initializeApp(cfg);
   const auth = getAuth(app);
   const db = getFirestore(app);
   const provider = new GoogleAuthProvider();
 
+  // Viewing someone's shared resume: just fetch their public profile and
+  // hand it to the app. No sign-in, no sync — the page is read-only.
+  if (VIEWED_SHARE_UID) {
+    share._readyResolve();
+    try {
+      const snap = await getDoc(doc(db, "profiles", VIEWED_SHARE_UID));
+      if (snap.exists()) window.peakbookApp.showSharedProfile(snap.data());
+      else window.peakbookApp.sharedProfileError("notfound");
+    } catch (e) {
+      console.error("Peakbook: could not load shared profile", e);
+      window.peakbookApp.sharedProfileError("error");
+    }
+    return;
+  }
+
   let userDocRef = null;
+  let profileDocRef = null;
   let unsubscribe = null;
   let pushTimer = null;
   let applyingRemote = false;
@@ -145,7 +205,8 @@ async function init() {
     }
   };
 
-  // Debounced push, called by app.js after every local edit.
+  // Debounced push, called by app.js after every local edit. While the
+  // profile is published, the public copy is kept in step with the logbook.
   window.peakbookSync = {
     push(climbs) {
       if (!userDocRef || applyingRemote) return;
@@ -154,8 +215,34 @@ async function init() {
         setDoc(userDocRef, { climbs, updatedAt: Date.now() }, { merge: true }).catch((e) =>
           console.error("Peakbook: cloud save failed", e)
         );
+        if (share.shared && profileDocRef) {
+          setDoc(profileDocRef, { climbs, updatedAt: Date.now() }, { merge: true }).catch((e) =>
+            console.error("Peakbook: public profile save failed", e)
+          );
+        }
       }, 600);
     },
+  };
+
+  share.enableImpl = async () => {
+    const user = auth.currentUser;
+    if (!user || !profileDocRef) throw new Error("not signed in");
+    const climbs = window.peakbookApp ? window.peakbookApp.getClimbs() : {};
+    await setDoc(profileDocRef, {
+      name: user.displayName || "",
+      photoURL: user.photoURL || "",
+      climbs,
+      updatedAt: Date.now(),
+    });
+    await setDoc(userDocRef, { shared: true }, { merge: true });
+    share.shared = true;
+  };
+
+  share.disableImpl = async () => {
+    if (!profileDocRef) throw new Error("not signed in");
+    await deleteDoc(profileDocRef);
+    await setDoc(userDocRef, { shared: false }, { merge: true });
+    share.shared = false;
   };
 
   onAuthStateChanged(auth, async (user) => {
@@ -166,12 +253,20 @@ async function init() {
 
     if (!user) {
       userDocRef = null;
+      profileDocRef = null;
+      share.signedIn = false;
+      share.shared = false;
+      share.uid = null;
+      share._readyResolve();
       renderSignedOut();
       return;
     }
 
     renderSignedIn(user);
     userDocRef = doc(db, "users", user.uid);
+    profileDocRef = doc(db, "profiles", user.uid);
+    share.signedIn = true;
+    share.uid = user.uid;
 
     // First sign-in on a device: fold any local climbs into the cloud copy
     // so nothing logged while signed out is lost.
@@ -179,10 +274,14 @@ async function init() {
     let remote = {};
     try {
       const snap = await getDoc(userDocRef);
-      if (snap.exists()) remote = snap.data().climbs || {};
+      if (snap.exists()) {
+        remote = snap.data().climbs || {};
+        share.shared = snap.data().shared === true;
+      }
     } catch (e) {
       console.error("Peakbook: could not read cloud logbook", e);
     }
+    share._readyResolve();
 
     const merged = mergeClimbs(local, remote);
     if (JSON.stringify(merged) !== JSON.stringify(remote)) {

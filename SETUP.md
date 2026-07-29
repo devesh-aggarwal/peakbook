@@ -58,11 +58,19 @@ service cloud.firestore {
     match /users/{uid} {
       allow read, write: if request.auth != null && request.auth.uid == uid;
     }
+    match /profiles/{uid} {
+      allow read: if true;
+      allow write: if request.auth != null && request.auth.uid == uid;
+    }
   }
 }
 ```
 
-This says: a signed-in person can read and write only their own logbook, and no one else's.
+This says: a signed-in person can read and write only their own logbook, and no
+one else's. The `profiles` collection powers the **Share profile** feature: it
+holds only profiles people have chosen to publish, anyone can read those (that's
+what makes a shared resume link work for visitors who aren't signed in), and
+only the owner can create, update, or delete their own.
 
 ## 6. Authorize your website's domain
 
@@ -87,6 +95,17 @@ their account and shows up on any device they sign in on.
 ### How the data is stored
 
 - One document per person at `users/{their-uid}` in Firestore.
-- The document holds `{ climbs: { mountainId: [{ date, note }] }, updatedAt }`.
+- The document holds `{ climbs: { mountainId: [{ date, note }] }, updatedAt }`
+  plus a `shared` flag recording whether their profile is published.
 - The same shape is kept in the browser's localStorage as an offline cache, so
   the app still works with no connection and syncs when it's back.
+
+### How profile sharing works
+
+- **Share profile** (in the sidebar, or **Share** on the dashboard) publishes a
+  public copy of the logbook to `profiles/{their-uid}` — `{ name, photoURL,
+  climbs, updatedAt }` — and hands back a link like `https://peakbook.co/?u=<uid>`.
+- Opening that link shows a read-only "climbing resume": stats, a map of their
+  summits, list progress, and every ascent by year. No sign-in needed to view.
+- While sharing is on, every logged climb also updates the public copy.
+  **Stop sharing** deletes the `profiles/{uid}` document, which kills the link.
