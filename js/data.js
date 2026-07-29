@@ -247,6 +247,7 @@ const MOUNTAINS = [
   { id: "yushan",         name: "Yushan",             elevation: 3952, country: "Taiwan",          flag: "🇹🇼", continent: "Asia",          range: "Yushan Range",    lat: 23.4700,  lng: 120.9572,  firstAscent: 1898 },
   { id: "fansipan",       name: "Fansipan",           elevation: 3147, country: "Vietnam",         flag: "🇻🇳", continent: "Asia",          range: "Hoàng Liên Sơn",  lat: 22.3033,  lng: 103.7750,  firstAscent: 1905 },
   { id: "apo",            name: "Mount Apo",          elevation: 2954, country: "Philippines",     flag: "🇵🇭", continent: "Asia",          range: "Mindanao",        lat: 6.9875,   lng: 125.2708,  firstAscent: 1880 },
+  { id: "umm-ad-dami",    name: "Jabal Umm ad Dami",  elevation: 1854, country: "Jordan",          flag: "🇯🇴", continent: "Asia",          range: "Wadi Rum",        lat: 29.3083,  lng: 35.4292 },
 
   // ---- Africa ----
   { id: "mount-kenya",    name: "Mount Kenya",        elevation: 5199, country: "Kenya",           flag: "🇰🇪", continent: "Africa",        range: "Rift Volcanoes",  lat: -0.1521,  lng: 37.3084,   firstAscent: 1899 },

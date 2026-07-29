@@ -4,7 +4,7 @@ A simple website for tracking the mountains you've climbed, inspired by flight-t
 
 ## Features
 
-- **Explore & search:** browse 275 notable peaks worldwide; search by name, range, or country and filter by continent or climbed status.
+- **Explore & search:** browse 276 notable peaks worldwide; search by name, range, or country and filter by continent or climbed status.
 - **Log climbs:** record ascents with a date and an optional note (route, partners, conditions). Multiple ascents per peak are supported.
 - **World map:** a dark world map with glowing markers for every summit you've logged (Leaflet + CARTO dark tiles).
 - **Statistics:** peaks climbed, highest summit, combined elevation, countries, continents, climbs per year, and altitude-band breakdown.
