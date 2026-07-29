@@ -876,8 +876,33 @@ a.ghost-btn { display: block; text-decoration: none; }
 .ascent-row:last-child { border-bottom: none; }
 .ascent-date { font-size: 14px; font-weight: 600; }
 .ascent-note { font-size: 12.5px; color: var(--text-secondary); margin-top: 2px; }
+.ascent-actions { display: flex; align-items: center; gap: 14px; flex-shrink: 0; }
+.ascent-edit-btn { color: var(--text-tertiary); font-size: 12px; font-weight: 600; }
+.ascent-edit-btn:hover { color: var(--accent); }
 .ascent-delete { color: var(--text-tertiary); font-size: 12px; font-weight: 600; flex-shrink: 0; }
 .ascent-delete:hover { color: var(--red); }
+
+/* Inline ascent editing */
+.ascent-edit { flex-wrap: wrap; }
+.ascent-edit-fields { display: flex; gap: 8px; flex: 1; min-width: 0; flex-wrap: wrap; }
+.ascent-edit-fields input[type="date"],
+.ascent-edit-fields input[type="text"] {
+  background: var(--card);
+  border: 1px solid var(--border-strong);
+  border-radius: 9px;
+  padding: 7px 10px;
+  color: var(--text);
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.ascent-edit-fields input[type="text"] { flex: 1; min-width: 140px; }
+.ascent-edit-fields input:focus { border-color: rgba(255, 126, 92, 0.55); box-shadow: 0 0 0 3px rgba(255, 126, 92, 0.12); }
+.ascent-edit-actions { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
+.ascent-save { color: var(--green); font-size: 12px; font-weight: 600; }
+.ascent-save:hover { filter: brightness(1.2); }
+.ascent-cancel { color: var(--text-tertiary); font-size: 12px; font-weight: 600; }
+.ascent-cancel:hover { color: var(--text); }
 
 .log-form { display: flex; flex-direction: column; gap: 13px; margin-top: 4px; }
 .log-form label { font-size: 12px; font-weight: 600; color: var(--text-secondary); display: block; margin-bottom: 6px; }
