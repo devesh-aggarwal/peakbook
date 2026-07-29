@@ -231,6 +231,10 @@ a.ghost-btn { display: block; text-decoration: none; }
 .unit-toggle button:hover { color: var(--text-secondary); }
 .unit-toggle button.active { background: rgba(255, 126, 92, 0.16); color: var(--accent); }
 
+/* Mobile loses the sidebar, and with it the only labelled unit control, so every
+   view that shows elevations carries its own copy. Hidden while the sidebar is up. */
+.unit-row-mobile { display: none; }
+
 /* ============ Main column ============ */
 
 .main {
@@ -592,7 +596,7 @@ a.ghost-btn { display: block; text-decoration: none; }
   position: absolute; top: 18px; left: 18px; z-index: 800;
   display: flex; flex-direction: column; gap: 9px;
 }
-.map-legend, .map-toggle {
+.map-legend, .map-toggle, .map-unit {
   background: rgba(13, 16, 21, 0.85);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
@@ -606,6 +610,10 @@ a.ghost-btn { display: block; text-decoration: none; }
 }
 .map-toggle { cursor: pointer; gap: 8px; }
 .map-toggle input { accent-color: var(--accent); }
+
+/* The map is all overlay and no header, so its unit control rides with the legend. */
+.map-unit { display: none; gap: 10px; padding: 7px 9px 7px 16px; }
+.map-unit .unit-toggle { background: rgba(213, 221, 235, 0.06); }
 .legend-item { display: inline-flex; align-items: center; gap: 6px; }
 .dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
 .dot-climbed { background: var(--green); box-shadow: 0 0 8px rgba(82, 199, 154, 0.8); }
@@ -1126,6 +1134,23 @@ body.share-mode .main { padding-bottom: 0; }
 
   .map-stats { left: 12px; right: 12px; bottom: 86px; justify-content: space-around; }
   .map-overlay { top: 12px; left: 12px; }
+  .map-unit { display: flex; }
+
+  /* The sidebar's copy is gone, so surface a labelled one in each view instead —
+     and drop the unlabelled pill that was crowding the search box. */
+  .unit-row-mobile {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 0;
+    margin-bottom: 18px;
+  }
+  .unit-row-mobile .unit-row-label { font-size: 13px; }
+  .search-row .unit-toggle-inline { display: none; }
+
+  /* Comfortable thumb targets on touch. */
+  .unit-toggle button { font-size: 13px; padding: 8px 16px; }
 
   /* Filter chips: one horizontally scrollable strip instead of three wrapped rows */
   .filter-row {
