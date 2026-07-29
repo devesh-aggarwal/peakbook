@@ -22,6 +22,7 @@ const state = {
   units: loadUnits(),
   map: null,
   markers: [],
+  editingAscentIdx: null, // stored-array index of the ascent being edited in the peak modal
 };
 
 const byId = Object.fromEntries(MOUNTAINS.map((m) => [m.id, m]));
@@ -650,6 +651,7 @@ function closeModal() {
   modalEl.innerHTML = "";
   state.openPeakId = null;
   state.fromListId = null;
+  state.editingAscentIdx = null;
 }
 
 backdrop.addEventListener("click", (e) => {
@@ -672,6 +674,7 @@ document.addEventListener("keydown", (e) => {
 function openPeak(id, fromListId) {
   const m = byId[id];
   if (!m) return;
+  if (state.openPeakId !== id) state.editingAscentIdx = null;
   state.openPeakId = id;
   state.fromListId = fromListId || null;
   // Keep each ascent's index in the stored array so "Remove" deletes the right one
@@ -705,13 +708,26 @@ function openPeak(id, fromListId) {
 
       ${ascents.length ? `
         <div class="modal-section-title">Your ascents</div>
-        ${ascents.map((a) => `
+        ${ascents.map((a) => a.idx === state.editingAscentIdx ? `
+          <form class="ascent-row ascent-edit" onsubmit="updateAscent(event, '${id}', ${a.idx})">
+            <div class="ascent-edit-fields">
+              <input type="date" id="edit-date" value="${a.date}" max="${today}" required aria-label="Summit date" />
+              <input type="text" id="edit-note" value="${esc(a.note || "")}" placeholder="Route, partners, conditions…" maxlength="120" aria-label="Note" />
+            </div>
+            <div class="ascent-edit-actions">
+              <button type="submit" class="ascent-save">Save</button>
+              <button type="button" class="ascent-cancel" onclick="cancelEditAscent()">Cancel</button>
+            </div>
+          </form>` : `
           <div class="ascent-row">
             <div>
               <div class="ascent-date">${formatDate(a.date)}</div>
               ${a.note ? `<div class="ascent-note">${esc(a.note)}</div>` : ""}
             </div>
-            <button class="ascent-delete" onclick="deleteAscent('${id}', ${a.idx})">Remove</button>
+            <div class="ascent-actions">
+              <button class="ascent-edit-btn" onclick="editAscent('${id}', ${a.idx})">Edit</button>
+              <button class="ascent-delete" onclick="deleteAscent('${id}', ${a.idx})">Remove</button>
+            </div>
           </div>`).join("")}` : ""}
 
       <div class="modal-section-title">${ascents.length ? "Log another ascent" : "Log an ascent"}</div>
@@ -743,10 +759,37 @@ function submitClimb(e, id) {
   celebrate(id);
 }
 
+function editAscent(id, index) {
+  state.editingAscentIdx = index;
+  openPeak(id, state.fromListId); // re-render the modal with this row as a form
+  const dateEl = document.getElementById("edit-date");
+  if (dateEl) dateEl.focus();
+}
+
+function cancelEditAscent() {
+  state.editingAscentIdx = null;
+  openPeak(state.openPeakId, state.fromListId);
+}
+
+function updateAscent(e, id, index) {
+  e.preventDefault();
+  const date = document.getElementById("edit-date").value;
+  const note = document.getElementById("edit-note").value.trim();
+  const list = state.climbs[id] || [];
+  if (!date || !list[index]) return;
+  list[index] = { date, note };
+  state.editingAscentIdx = null;
+  saveClimbs();
+  render();
+  openPeak(id, state.fromListId);
+  toast("Ascent updated");
+}
+
 function deleteAscent(id, index) {
   const list = state.climbs[id] || [];
   list.splice(index, 1);
   if (!list.length) delete state.climbs[id];
+  state.editingAscentIdx = null; // indices shifted; a stale edit form would hit the wrong entry
   saveClimbs();
   render();
   openPeak(id, state.fromListId); // refresh the modal in place
