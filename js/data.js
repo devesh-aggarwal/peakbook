@@ -168,6 +168,7 @@ const MOUNTAINS = [
   { id: "misti",          name: "El Misti",           elevation: 5822, country: "Peru",            flag: "🇵🇪", continent: "South America", range: "Andes",           lat: -16.2942, lng: -71.4092 },
   { id: "cayambe",        name: "Cayambe",            elevation: 5790, country: "Ecuador",         flag: "🇪🇨", continent: "South America", range: "Andes",           lat: 0.0292,   lng: -77.9867,  firstAscent: 1880 },
   { id: "cristobal-colon", name: "Pico Cristóbal Colón", elevation: 5730, country: "Colombia",     flag: "🇨🇴", continent: "South America", range: "Sierra Nevada de Santa Marta", lat: 10.8383, lng: -73.6861, firstAscent: 1939 },
+  { id: "nevado-mateo",   name: "Nevado Mateo",       elevation: 5150, country: "Peru",            flag: "🇵🇪", continent: "South America", range: "Cordillera Blanca", lat: -9.1063, lng: -77.4935 },
   { id: "pico-bolivar",   name: "Pico Bolívar",       elevation: 4978, country: "Venezuela",       flag: "🇻🇪", continent: "South America", range: "Cordillera de Mérida", lat: 8.5411, lng: -71.0472,  firstAscent: 1935 },
   { id: "fitz-roy",       name: "Fitz Roy",           elevation: 3405, country: "Argentina / Chile", flag: "🇦🇷", continent: "South America", range: "Patagonia",     lat: -49.2711, lng: -73.0433,  firstAscent: 1952 },
   { id: "cerro-torre",    name: "Cerro Torre",        elevation: 3128, country: "Argentina / Chile", flag: "🇦🇷", continent: "South America", range: "Patagonia",     lat: -49.2925, lng: -73.0983,  firstAscent: 1974 },
