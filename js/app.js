@@ -6,6 +6,12 @@
 
 const STORAGE_KEY = "peakbook.climbs";
 const LEGACY_STORAGE_KEY = "summit.climbs"; // the app's former name
+const UNITS_KEY = "peakbook.units";         // "m" | "ft"
+
+// When the URL is a shared-profile link (?u=<uid>), the app boots into a
+// read-only "climbing resume" view of that person's public profile instead
+// of the normal logbook.
+const SHARE_UID = new URLSearchParams(location.search).get("u");
 
 const state = {
   climbs: loadClimbs(),
@@ -13,6 +19,7 @@ const state = {
   search: "",
   status: "all", // all | climbed | unclimbed
   filter: "all", // all | <continent> — independent of status, so they combine
+  units: loadUnits(),
   map: null,
   markers: [],
 };
@@ -22,6 +29,7 @@ const byId = Object.fromEntries(MOUNTAINS.map((m) => [m.id, m]));
 /* ---------- persistence ---------- */
 
 function loadClimbs() {
+  if (SHARE_UID) return {}; // resume view shows someone else's climbs, never ours
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored) return JSON.parse(stored) || {};
@@ -43,6 +51,15 @@ function writeLocal() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state.climbs));
 }
 
+// Elevations are stored in metres; this is purely a display preference.
+function loadUnits() {
+  try {
+    return localStorage.getItem(UNITS_KEY) === "ft" ? "ft" : "m";
+  } catch {
+    return "m";
+  }
+}
+
 // Called after any change the user makes. Writes locally and, when the
 // auth module is connected and signed in, pushes to the cloud.
 function saveClimbs() {
@@ -50,6 +67,21 @@ function saveClimbs() {
   if (window.peakbookSync && typeof window.peakbookSync.push === "function") {
     window.peakbookSync.push(state.climbs);
   }
+}
+
+// Keep only entries that look like real ascents of known mountains.
+// Guards both imported files and shared-profile data fetched from the cloud.
+function sanitizeClimbs(climbs) {
+  const clean = {};
+  if (!climbs || typeof climbs !== "object" || Array.isArray(climbs)) return clean;
+  for (const [id, list] of Object.entries(climbs)) {
+    if (!byId[id] || !Array.isArray(list)) continue;
+    const ascents = list
+      .filter((a) => a && typeof a.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(a.date))
+      .map((a) => ({ date: a.date, note: typeof a.note === "string" ? a.note : "" }));
+    if (ascents.length) clean[id] = ascents;
+  }
+  return clean;
 }
 
 /* ---------- derived data ---------- */
@@ -82,9 +114,76 @@ function listProgress(list) {
 
 const fmt = new Intl.NumberFormat("en-US");
 
-function metres(n) {
-  return `${fmt.format(n)}<span class="unit">m</span>`;
+const M_TO_FT = 3.28084;
+
+function unitLabel() {
+  return state.units === "ft" ? "ft" : "m";
 }
+
+// US summits are surveyed in feet and their metric figure is the derived one,
+// so where the dataset carries a canonical `ft` we show that rather than
+// re-deriving it — otherwise rounding to whole metres turns Mount Elbert's
+// 14,440 ft into 14,439.
+function peakUnit(m) {
+  if (state.units !== "ft") return Math.round(m.elevation);
+  return Math.round(m.ft != null ? m.ft : m.elevation * M_TO_FT);
+}
+
+function peakElev(m) {
+  return `${fmt.format(peakUnit(m))} ${unitLabel()}`;
+}
+
+function peakElevHTML(m, lead = "") {
+  return `${fmt.format(peakUnit(m))}<span class="unit">${lead}${unitLabel()}</span>`;
+}
+
+// The same elevation in the *other* system, for the peak detail page where
+// showing both is genuinely useful.
+// The fact label is uppercased by CSS, so the unit rides in a span that opts
+// out — "4,401 m", never "4,401 M".
+function peakElevAlt(m) {
+  const [n, u] = state.units === "ft"
+    ? [Math.round(m.elevation), "m"]
+    : [Math.round(m.ft != null ? m.ft : m.elevation * M_TO_FT), "ft"];
+  return `${fmt.format(n)}<span class="unit-literal">${u}</span>`;
+}
+
+// Totals are summed in whatever unit is on display, so the arithmetic matches
+// the per-peak numbers the reader can see.
+function totalUnit(peaks) {
+  return peaks.reduce((s, m) => s + peakUnit(m), 0);
+}
+
+function setUnits(u) {
+  const next = u === "ft" ? "ft" : "m";
+  if (next === state.units) return;
+  state.units = next;
+  try {
+    localStorage.setItem(UNITS_KEY, next);
+  } catch {
+    /* private mode — the toggle still works for this session */
+  }
+  renderUnitToggle();
+  render();
+  // Keep an open peak/list modal in sync rather than making the user reopen it.
+  if (state.openPeakId && !backdrop.hidden) openPeak(state.openPeakId, state.fromListId);
+}
+
+function renderUnitToggle() {
+  const html = ["m", "ft"]
+    .map((u) => {
+      const on = state.units === u;
+      return `<button type="button" class="${on ? "active" : ""}" data-unit="${u}" aria-pressed="${on}">${u}</button>`;
+    })
+    .join("");
+  document.querySelectorAll(".unit-toggle").forEach((el) => (el.innerHTML = html));
+}
+
+// Delegated, so toggles inside re-rendered markup keep working.
+document.addEventListener("click", (e) => {
+  const btn = e.target.closest && e.target.closest(".unit-toggle button");
+  if (btn) setUnits(btn.dataset.unit);
+});
 
 // Today's date in the user's own timezone (toISOString would give UTC,
 // which is off by a day for part of the world every day).
@@ -108,7 +207,7 @@ function fold(s) {
 }
 
 function peakHaystack(m) {
-  return fold(`${m.name} ${m.country} ${m.range} ${m.continent}`);
+  return fold(`${m.name} ${m.aka || ""} ${m.country} ${m.range} ${m.continent}`);
 }
 
 /* ============================================================
@@ -180,7 +279,7 @@ function renderDashboard() {
   const everests = (totalElev / everest).toFixed(1);
 
   document.getElementById("dash-subtitle").textContent =
-    `${peaks.length} peak${peaks.length === 1 ? "" : "s"} logged, ${fmt.format(totalElev)} metres of summits.`;
+    `${peaks.length} peak${peaks.length === 1 ? "" : "s"} logged, ${fmt.format(totalUnit(peaks))} ${unitLabel()} of summits.`;
 
   // Stats
   let html = `
@@ -191,11 +290,11 @@ function renderDashboard() {
         <div class="stat-label">${everests}× the height of Everest, stacked end to end</div>
       </div>
       <div class="stat-card">
-        <div class="stat-value">${metres(highest.elevation)}</div>
+        <div class="stat-value">${peakElevHTML(highest)}</div>
         <div class="stat-label">Highest summit · ${esc(highest.name)}</div>
       </div>
       <div class="stat-card">
-        <div class="stat-value">${metres(totalElev)}</div>
+        <div class="stat-value">${fmt.format(totalUnit(peaks))}<span class="unit">${unitLabel()}</span></div>
         <div class="stat-label">Combined elevation</div>
       </div>
       <div class="stat-card">
@@ -232,7 +331,7 @@ function renderDashboard() {
                 <div class="timeline-name">${esc(a.mountain.name)}</div>
                 <div class="timeline-meta">${formatDate(a.date)}${a.note ? " · " + esc(a.note) : ""}</div>
               </div>
-              <div class="timeline-elev">${fmt.format(a.mountain.elevation)} m</div>
+              <div class="timeline-elev">${peakElev(a.mountain)}</div>
             </div>`).join("")}
         </div>
       </div>
@@ -246,12 +345,12 @@ function renderDashboard() {
   el.innerHTML = html;
 }
 
-function ringCard(list, p) {
+function ringCard(list, p, interactive = true) {
   const r = 34, c = 2 * Math.PI * r;
   const offset = c * (1 - p.pct);
   const complete = p.done === p.total;
   return `
-    <div class="ring-card ${complete ? "complete" : ""}" onclick="openList('${list.id}')">
+    <div class="ring-card ${complete ? "complete" : ""} ${interactive ? "" : "static"}" ${interactive ? `onclick="openList('${list.id}')"` : ""}>
       <div class="ring-wrap">
         <svg viewBox="0 0 84 84">
           <circle class="ring-bg" cx="42" cy="42" r="${r}"></circle>
@@ -291,17 +390,30 @@ function climbsPerYearChart(ascents) {
     </div>`;
 }
 
+// Band edges are round numbers in whichever unit is on display, rather than
+// converted metric ones — so the feet view breaks at 14,000 ft.
+const BAND_COLORS = ["#A08CF0", "#7FA9E8", "#53BFC0", "#E3B25F", "#FF7E5C"];
+const BANDS_M = [
+  { label: "8,000 m+", min: 8000 },
+  { label: "6–8,000 m", min: 6000 },
+  { label: "4–6,000 m", min: 4000 },
+  { label: "2–4,000 m", min: 2000 },
+  { label: "< 2,000 m", min: 0 },
+];
+const BANDS_FT = [
+  { label: "25,000 ft+", min: 25000 },
+  { label: "20–25,000 ft", min: 20000 },
+  { label: "14–20,000 ft", min: 14000 },
+  { label: "8–14,000 ft", min: 8000 },
+  { label: "< 8,000 ft", min: 0 },
+];
+
 function altitudeBands(peaks) {
-  const bands = [
-    { label: "8,000 m+", min: 8000, color: "#A08CF0" },
-    { label: "6–8,000 m", min: 6000, color: "#7FA9E8" },
-    { label: "4–6,000 m", min: 4000, color: "#53BFC0" },
-    { label: "2–4,000 m", min: 2000, color: "#E3B25F" },
-    { label: "< 2,000 m", min: 0, color: "#FF7E5C" },
-  ];
+  const bands = (state.units === "ft" ? BANDS_FT : BANDS_M)
+    .map((b, i) => ({ ...b, color: BAND_COLORS[i] }));
   const counts = bands.map((b, i) => {
     const maxE = i === 0 ? Infinity : bands[i - 1].min;
-    return peaks.filter((p) => p.elevation >= b.min && p.elevation < maxE).length;
+    return peaks.filter((p) => peakUnit(p) >= b.min && peakUnit(p) < maxE).length;
   });
   const max = Math.max(...counts, 1);
   return `
@@ -427,7 +539,7 @@ function renderPeakGrid() {
         <div class="peak-name">${esc(m.name)}</div>
         <div class="peak-meta">${esc(m.range)} · ${esc(m.country)}</div>
         <div class="peak-card-bottom">
-          <div class="peak-elev">${fmt.format(m.elevation)}<span class="unit"> m</span></div>
+          <div class="peak-elev">${peakElevHTML(m, " ")}</div>
           ${peakListDots(m)}
         </div>
       </div>`;
@@ -481,7 +593,7 @@ function renderMapMarkers() {
     const mk = L.marker([m.lat, m.lng], { icon, riseOnHover: true }).addTo(state.map);
     mk.bindPopup(`
       <div class="popup-name">${m.flag} ${esc(m.name)}</div>
-      <div class="popup-meta">${fmt.format(m.elevation)} m · ${esc(m.range)}</div>
+      <div class="popup-meta">${peakElev(m)} · ${esc(m.range)}</div>
       <button class="popup-btn" onclick="openPeak('${m.id}')">${climbed ? "View ascents →" : "Log a climb →"}</button>
     `);
     state.markers.push(mk);
@@ -492,7 +604,7 @@ function renderMapMarkers() {
   const continents = new Set(peaks.map((m) => m.continent));
   document.getElementById("map-stats").innerHTML = `
     <div><div class="map-stat-value">${peaks.length}</div><div class="map-stat-label">PEAKS</div></div>
-    <div><div class="map-stat-value">${fmt.format(totalElev)}</div><div class="map-stat-label">METRES</div></div>
+    <div><div class="map-stat-value">${fmt.format(totalUnit(peaks))}</div><div class="map-stat-label">${unitLabel() === "ft" ? "FEET" : "METRES"}</div></div>
     <div><div class="map-stat-value">${continents.size}/7</div><div class="map-stat-label">CONTINENTS</div></div>`;
 }
 
@@ -546,7 +658,7 @@ backdrop.addEventListener("click", (e) => {
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && !backdrop.hidden) closeModal();
   // "/" jumps to Explore search from anywhere (unless already typing somewhere).
-  if (e.key === "/" && backdrop.hidden) {
+  if (e.key === "/" && backdrop.hidden && !SHARE_UID) {
     const t = e.target;
     if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT")) return;
     e.preventDefault();
@@ -579,8 +691,7 @@ function openPeak(id, fromListId) {
       <div class="modal-title">${esc(m.name)}</div>
       <div class="modal-sub">${esc(m.range)} · ${esc(m.country)} · ${esc(m.continent)}</div>
       <div class="modal-facts">
-        <div class="fact"><div class="fact-value">${fmt.format(m.elevation)} m</div><div class="fact-label">Elevation</div></div>
-        <div class="fact"><div class="fact-value">${fmt.format(Math.round(m.elevation * 3.28084))} ft</div><div class="fact-label">Elevation</div></div>
+        <div class="fact"><div class="fact-value">${peakElev(m)}</div><div class="fact-label">Elevation · ${peakElevAlt(m)}</div></div>
         ${m.firstAscent ? `<div class="fact"><div class="fact-value">${m.firstAscent}</div><div class="fact-label">First ascent</div></div>` : ""}
         ${ascents.length ? `<div class="fact"><div class="fact-value" style="color:var(--green)">${ascents.length}×</div><div class="fact-label">Your ascents</div></div>` : ""}
       </div>
@@ -682,7 +793,7 @@ function openList(id) {
           <div class="list-peak-row ${isClimbed(m.id) ? "done" : ""}" onclick="openPeak('${m.id}', '${l.id}')">
             <div class="check-circle">✓</div>
             <div class="list-peak-name">${m.flag} ${esc(m.name)}</div>
-            <div class="list-peak-elev">${fmt.format(m.elevation)} m</div>
+            <div class="list-peak-elev">${peakElev(m)}</div>
           </div>`).join("")}
       </div>
     </div>
@@ -723,7 +834,7 @@ function openPicker() {
             <div class="picker-row" onclick="openPeak('${m.id}')">
               <span class="picker-flag">${m.flag}</span>
               <span class="picker-name">${esc(m.name)}${isClimbed(m.id) ? ' <span style="color:var(--green)">✓</span>' : ""}</span>
-              <span class="picker-elev">${fmt.format(m.elevation)} m</span>
+              <span class="picker-elev">${peakElev(m)}</span>
             </div>`)
           .join("")
       : `<div class="no-results" style="padding:30px 0">No mountains match.</div>`;
@@ -737,6 +848,109 @@ function openPicker() {
 }
 
 document.getElementById("btn-log-climb").addEventListener("click", openPicker);
+
+/* ---------- Share profile (climbing resume) ---------- */
+
+async function openShare() {
+  const share = window.peakbookShare;
+  if (!share) {
+    // auth.js hasn't finished loading yet — one more click will get there.
+    toast("Still starting up — try again in a second");
+    return;
+  }
+  openModal(shareModalShell(`<div class="share-status">Checking your profile…</div>`));
+  const s = await share.getState();
+  if (backdrop.hidden) return; // user closed the modal while we were checking
+
+  let body;
+  if (!s.configured) {
+    body = `
+      <p class="share-blurb">Sharing publishes a read-only <strong>climbing resume</strong> — your peaks,
+      stats, and map — at a link anyone can open.</p>
+      <p class="share-blurb">It needs cloud sync, which isn't set up on this copy of Peakbook.
+      Add a Firebase config (see <strong>SETUP.md</strong>) to enable it.</p>`;
+  } else if (!s.signedIn) {
+    body = `
+      <p class="share-blurb">Sharing publishes a read-only <strong>climbing resume</strong> — your peaks,
+      stats, and map — at a link anyone can open. Sign in first so your resume has a home.</p>
+      <button class="primary-btn" onclick="closeModal(); peakbookAuth.signIn().then(() => openShare())">Sign in with Google</button>`;
+  } else if (!s.shared) {
+    body = `
+      <p class="share-blurb">Publish a read-only <strong>climbing resume</strong> — your peaks, stats, and
+      map — at a public link. It stays up to date as you log climbs, and you can unpublish any time.</p>
+      <button class="primary-btn" id="share-enable">Publish my profile</button>`;
+  } else {
+    const url = share.url();
+    body = `
+      <p class="share-blurb">Your climbing resume is <strong style="color:var(--green)">live</strong>.
+      Anyone with this link can see your peaks, stats, and map — it updates as you log climbs.</p>
+      <div class="share-link-row">
+        <input class="share-link" id="share-link" type="text" readonly value="${esc(url)}" onclick="this.select()" />
+        <button class="secondary-btn" id="share-copy">Copy</button>
+      </div>
+      <div class="share-actions">
+        <a class="secondary-btn" href="${esc(url)}" target="_blank" rel="noopener">Preview ↗</a>
+        <button class="share-stop" id="share-disable">Stop sharing</button>
+      </div>`;
+  }
+  openModal(shareModalShell(body));
+
+  const enableBtn = document.getElementById("share-enable");
+  if (enableBtn) enableBtn.addEventListener("click", async () => {
+    enableBtn.disabled = true;
+    enableBtn.textContent = "Publishing…";
+    try {
+      await share.enable();
+      openShare(); // re-render in the "live" state
+      toast("Your climbing resume is live");
+    } catch (e) {
+      console.error("Peakbook: publish failed", e);
+      toast("⚠️ Couldn't publish — check your connection and Firestore rules");
+      openShare();
+    }
+  });
+
+  const copyBtn = document.getElementById("share-copy");
+  if (copyBtn) copyBtn.addEventListener("click", async () => {
+    const input = document.getElementById("share-link");
+    try {
+      await navigator.clipboard.writeText(input.value);
+    } catch {
+      input.select();
+      document.execCommand("copy");
+    }
+    toast("Link copied");
+  });
+
+  const disableBtn = document.getElementById("share-disable");
+  if (disableBtn) disableBtn.addEventListener("click", async () => {
+    disableBtn.disabled = true;
+    try {
+      await share.disable();
+      toast("Profile unpublished");
+      openShare();
+    } catch (e) {
+      console.error("Peakbook: unpublish failed", e);
+      toast("⚠️ Couldn't unpublish — try again");
+      openShare();
+    }
+  });
+}
+
+function shareModalShell(body) {
+  return `
+    <div class="modal-hero">
+      <button class="modal-close" onclick="closeModal()">✕</button>
+      <div class="modal-title">Share your profile</div>
+      <div class="modal-sub">A public climbing resume, straight from your logbook</div>
+    </div>
+    <div class="modal-body">${body}</div>`;
+}
+
+for (const id of ["btn-share", "btn-share-dash"]) {
+  const btn = document.getElementById(id);
+  if (btn) btn.addEventListener("click", openShare);
+}
 
 /* ============================================================
    Toast, demo data, import/export
@@ -796,17 +1010,7 @@ document.getElementById("import-file").addEventListener("change", (e) => {
   reader.onload = () => {
     try {
       const data = JSON.parse(reader.result);
-      const climbs = data.climbs || data;
-      if (typeof climbs !== "object" || Array.isArray(climbs) || climbs === null) throw new Error("bad format");
-      // Keep only entries that look like real ascents of known mountains.
-      const clean = {};
-      for (const [id, list] of Object.entries(climbs)) {
-        if (!byId[id] || !Array.isArray(list)) continue;
-        const ascents = list
-          .filter((a) => a && typeof a.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(a.date))
-          .map((a) => ({ date: a.date, note: typeof a.note === "string" ? a.note : "" }));
-        if (ascents.length) clean[id] = ascents;
-      }
+      const clean = sanitizeClimbs(data.climbs || data);
       if (!Object.keys(clean).length) throw new Error("no valid climbs");
       const existing = Object.keys(state.climbs).length;
       if (existing && !confirm(`Replace your current logbook (${existing} peak${existing === 1 ? "" : "s"}) with this file (${Object.keys(clean).length} peaks)?`)) return;
@@ -840,13 +1044,222 @@ window.peakbookApp = {
     render();
     if (state.openPeakId && !backdrop.hidden) openPeak(state.openPeakId, state.fromListId);
   },
+  // Shared-profile (resume) mode: auth.js fetched profiles/<uid> for us.
+  showSharedProfile(profile) {
+    if (!SHARE_UID) return;
+    state.climbs = sanitizeClimbs(profile && profile.climbs);
+    renderResume(profile || {});
+  },
+  sharedProfileError(kind) {
+    if (!SHARE_UID) return;
+    renderResumeError(kind);
+  },
 };
 
 // Let other modules trigger a toast (e.g. sign-in prompts).
 window.toast = toast;
 
 /* ============================================================
+   Shared-profile "climbing resume" view (read-only, at ?u=<uid>)
+   ============================================================ */
+
+function resumeShell(inner) {
+  return `
+    <div class="resume">
+      <div class="resume-topbar">
+        <a class="resume-brand" href="${location.pathname}">
+          <span class="brand-mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m8 3 4 8 5-5 5 15H2L8 3z"/></svg></span>
+          Peakbook
+        </a>
+        <a class="secondary-btn" href="${location.pathname}">Start your own logbook</a>
+      </div>
+      ${inner}
+    </div>`;
+}
+
+function renderResumeLoading() {
+  document.getElementById("resume-content").innerHTML = resumeShell(`
+    <div class="resume-message"><h3>Loading climbing resume…</h3></div>`);
+}
+
+function renderResumeError(kind) {
+  const msg = kind === "unconfigured"
+    ? "This copy of Peakbook doesn't have cloud sync set up, so shared profiles can't be loaded here."
+    : "This profile doesn't exist or is no longer shared.";
+  document.getElementById("resume-content").innerHTML = resumeShell(`
+    <div class="resume-message">
+      <h3>No resume here</h3>
+      <p>${msg}</p>
+      <a class="primary-btn" href="${location.pathname}" style="display:inline-block; text-decoration:none">Go to Peakbook</a>
+    </div>`);
+}
+
+function renderResume(profile) {
+  const name = (profile.name || "").trim() || "A climber";
+  const peaks = climbedPeaks();
+  const ascents = allAscents();
+  document.title = `${name} — Climbing resume · Peakbook`;
+
+  const avatar = profile.photoURL
+    ? `<img class="resume-avatar" src="${esc(profile.photoURL)}" alt="" referrerpolicy="no-referrer" />`
+    : `<div class="resume-avatar fallback">${esc(resumeInitials(name))}</div>`;
+
+  if (!ascents.length) {
+    document.getElementById("resume-content").innerHTML = resumeShell(`
+      <header class="resume-hero">
+        ${avatar}
+        <div>
+          <h1>${esc(name)}</h1>
+          <p class="subtitle">Climbing resume</p>
+        </div>
+      </header>
+      <div class="resume-message"><h3>No climbs logged yet</h3><p>This logbook is still waiting for its first summit.</p></div>`);
+    return;
+  }
+
+  const totalElev = peaks.reduce((s, m) => s + m.elevation, 0);
+  const highest = peaks.reduce((a, b) => (a.elevation > b.elevation ? a : b));
+  const countries = new Set(peaks.map((m) => m.country.split(" / ")[0]));
+  const continents = new Set(peaks.map((m) => m.continent));
+  const firstYear = ascents[ascents.length - 1].date.slice(0, 4);
+
+  // Ascents grouped by year, newest first (allAscents is already date-desc).
+  const byYear = new Map();
+  for (const a of ascents) {
+    const y = a.date.slice(0, 4);
+    if (!byYear.has(y)) byYear.set(y, []);
+    byYear.get(y).push(a);
+  }
+
+  const started = PEAK_LISTS.map((l) => ({ l, p: listProgress(l) })).filter((x) => x.p.done > 0);
+
+  document.getElementById("resume-content").innerHTML = resumeShell(`
+    <header class="resume-hero">
+      ${avatar}
+      <div>
+        <h1>${esc(name)}</h1>
+        <p class="subtitle">Climbing resume · ${peaks.length} peak${peaks.length === 1 ? "" : "s"} since ${firstYear}</p>
+      </div>
+    </header>
+
+    <div class="stat-hero resume-stats">
+      <div class="stat-card stat-featured">
+        <div class="stat-kicker">Peaks climbed</div>
+        <div class="stat-value">${peaks.length}</div>
+        <div class="stat-label">${ascents.length} ascent${ascents.length === 1 ? "" : "s"} logged</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value">${peakElevHTML(highest)}</div>
+        <div class="stat-label">Highest summit · ${esc(highest.name)}</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value">${fmt.format(totalUnit(peaks))}<span class="unit">${unitLabel()}</span></div>
+        <div class="stat-label">Combined elevation</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value">${countries.size}</div>
+        <div class="stat-label">Countr${countries.size === 1 ? "y" : "ies"}</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value">${continents.size}<span class="unit">/7</span></div>
+        <div class="stat-label">Continents</div>
+      </div>
+    </div>
+
+    <div class="dash-section">
+      <div class="dash-section-title">Summits on the map</div>
+      <div id="resume-map" class="resume-map"></div>
+    </div>
+
+    ${started.length ? `
+      <div class="dash-section">
+        <div class="dash-section-title">List progress</div>
+        <div class="rings-row">${started.map(({ l, p }) => ringCard(l, p, false)).join("")}</div>
+      </div>` : ""}
+
+    <div class="dash-section">
+      <div class="dash-section-title">All ascents</div>
+      ${[...byYear.entries()].map(([year, list]) => `
+        <div class="resume-year">
+          <div class="resume-year-label">${year}</div>
+          <div class="chart-card resume-year-card">
+            ${list.map((a) => `
+              <div class="resume-ascent">
+                <div class="timeline-flag">${a.mountain.flag}</div>
+                <div class="timeline-body">
+                  <div class="timeline-name">${esc(a.mountain.name)}</div>
+                  <div class="timeline-meta">${esc(a.mountain.range)} · ${esc(a.mountain.country)}${a.note ? ` — <em>${esc(a.note)}</em>` : ""}</div>
+                </div>
+                <div class="resume-ascent-right">
+                  <div class="timeline-elev">${peakElev(a.mountain)}</div>
+                  <div class="resume-ascent-date">${formatDate(a.date)}</div>
+                </div>
+              </div>`).join("")}
+          </div>
+        </div>`).join("")}
+    </div>
+
+    <footer class="resume-footer">
+      <p>Logbook kept on <a href="${location.pathname}">Peakbook</a> — a free climbing logbook &amp; peak tracker.</p>
+    </footer>`);
+
+  initResumeMap(peaks);
+}
+
+function resumeInitials(name) {
+  const parts = name.split(/\s+/).filter(Boolean);
+  if (!parts.length) return "🧗";
+  return (parts[0][0] + (parts[1] ? parts[1][0] : "")).toUpperCase();
+}
+
+function initResumeMap(peaks) {
+  const map = L.map("resume-map", {
+    zoomControl: true,
+    scrollWheelZoom: false,
+    worldCopyJump: true,
+    minZoom: 1,
+  });
+  L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
+    subdomains: "abcd",
+    maxZoom: 19,
+  }).addTo(map);
+  for (const m of peaks) {
+    const icon = L.divIcon({
+      className: "peak-marker is-climbed",
+      html: `<div class="marker-dot"></div>`,
+      iconSize: [12, 12],
+      iconAnchor: [6, 6],
+    });
+    L.marker([m.lat, m.lng], { icon, riseOnHover: true })
+      .addTo(map)
+      .bindPopup(`
+        <div class="popup-name">${m.flag} ${esc(m.name)}</div>
+        <div class="popup-meta">${peakElev(m)} · ${esc(m.range)}</div>`);
+  }
+  // Fit after a frame: the container was injected via innerHTML this tick,
+  // so Leaflet may have measured it before layout settled.
+  requestAnimationFrame(() => {
+    map.invalidateSize();
+    if (peaks.length === 1) {
+      map.setView([peaks[0].lat, peaks[0].lng], 5);
+    } else {
+      map.fitBounds(L.latLngBounds(peaks.map((m) => [m.lat, m.lng])), { padding: [40, 40], maxZoom: 6 });
+    }
+  });
+}
+
+/* ============================================================
    Boot
    ============================================================ */
 
-render();
+renderUnitToggle();
+
+if (SHARE_UID) {
+  document.body.classList.add("share-mode");
+  state.view = "resume";
+  document.querySelectorAll(".view").forEach((v) => v.classList.toggle("active", v.id === "view-resume"));
+  renderResumeLoading();
+} else {
+  render();
+}
