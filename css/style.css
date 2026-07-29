@@ -350,6 +350,7 @@ h1, .display {
 .dash-section-title .see-all:hover { text-decoration: underline; text-underline-offset: 3px; }
 
 .dash-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 26px; align-items: start; }
+.dash-columns > * { min-width: 0; } /* let chart/timeline columns shrink on narrow screens */
 
 /* Progress rings */
 .rings-row {
@@ -634,6 +635,27 @@ h1, .display {
 .popup-btn { font-size: 12.5px; font-weight: 650; color: var(--accent); padding: 0; }
 .popup-btn:hover { text-decoration: underline; text-underline-offset: 3px; }
 .leaflet-container a.leaflet-popup-close-button { color: var(--text-tertiary); }
+
+/* Dark-theme the stock Leaflet chrome (zoom control + attribution) */
+.leaflet-bar {
+  border: 1px solid var(--border-strong) !important;
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: var(--shadow);
+}
+.leaflet-bar a {
+  background: rgba(13, 16, 21, 0.9);
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border);
+}
+.leaflet-bar a:hover { background: var(--card-hover); color: var(--text); }
+.leaflet-bar a.leaflet-disabled { background: rgba(13, 16, 21, 0.9); color: var(--text-tertiary); }
+.leaflet-control-attribution {
+  background: rgba(13, 16, 21, 0.75) !important;
+  color: var(--text-tertiary) !important;
+  font-size: 10px;
+}
+.leaflet-control-attribution a { color: var(--text-secondary) !important; }
 
 /* ============ Lists view ============ */
 
@@ -922,6 +944,25 @@ h1, .display {
 
   .map-stats { left: 12px; right: 12px; bottom: 86px; justify-content: space-around; }
   .map-overlay { top: 12px; left: 12px; }
+
+  /* Filter chips: one horizontally scrollable strip instead of three wrapped rows */
+  .filter-row {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    margin-left: -18px; margin-right: -18px;
+    padding: 2px 18px 8px;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  .filter-row::-webkit-scrollbar { display: none; }
+  .chip { flex-shrink: 0; }
+  .chip-divider { flex-shrink: 0; }
+
+  /* 16px inputs so iOS Safari doesn't auto-zoom on focus */
+  .search-box input,
+  .log-form input[type="date"],
+  .log-form input[type="text"],
+  .log-form select { font-size: 16px; }
 }
 
 /* Scrollbars */

@@ -86,6 +86,13 @@ function metres(n) {
   return `${fmt.format(n)}<span class="unit">m</span>`;
 }
 
+// Today's date in the user's own timezone (toISOString would give UTC,
+// which is off by a day for part of the world every day).
+function todayISO() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 function formatDate(iso) {
   const d = new Date(iso + "T12:00:00");
   return d.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
@@ -562,7 +569,7 @@ function openPeak(id, fromListId) {
     .sort((a, b) => b.date.localeCompare(a.date));
   const fromList = fromListId ? PEAK_LISTS.find((l) => l.id === fromListId) : null;
   const lists = PEAK_LISTS.filter((l) => l.peaks.includes(id));
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayISO();
 
   openModal(`
     <div class="modal-hero">
@@ -772,7 +779,7 @@ document.getElementById("btn-export").addEventListener("click", () => {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `peakbook-logbook-${new Date().toISOString().slice(0, 10)}.json`;
+  a.download = `peakbook-logbook-${todayISO()}.json`;
   a.click();
   URL.revokeObjectURL(url);
   toast("Logbook exported");
