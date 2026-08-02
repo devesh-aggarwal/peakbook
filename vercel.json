@@ -1,0 +1,12 @@
+{
+  "rewrites": [
+    {
+      "source": "/__/auth/:path*",
+      "destination": "https://peakbook-3aee4.firebaseapp.com/__/auth/:path*"
+    },
+    {
+      "source": "/__/firebase/:path*",
+      "destination": "https://peakbook-3aee4.firebaseapp.com/__/firebase/:path*"
+    }
+  ]
+}

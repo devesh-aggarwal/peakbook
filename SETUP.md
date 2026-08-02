@@ -79,9 +79,33 @@ So the Google popup is allowed to run on your live site:
 1. Go to **Authentication > Settings > Authorized domains**.
 2. Click **Add domain** and add each domain the site runs on, for example:
    - `peakbook.co`
+   - `www.peakbook.co`
    - your Vercel domain, e.g. `peakbook-xxxx.vercel.app`
 
    `localhost` is already there for local testing.
+
+## 7. Serve the sign-in handler from your own domain
+
+Out of the box, `authDomain` is `<project>.firebaseapp.com`, so the Google
+sign-in popup runs on a *different site* than the app. Safari on iPhone (and
+most in-app browsers) partition or drop storage for that other site
+mid-flow, which kills the sign-in with an "Unable to process request due to
+missing initial state" error. The fix is to run the whole flow on the app's
+own domain:
+
+1. `vercel.json` in this repo already proxies `/__/auth/*` (and
+   `/__/firebase/*`) to `peakbook-3aee4.firebaseapp.com`, and
+   `js/firebase-config.js` sets `authDomain` to `www.peakbook.co`. If you're
+   deploying your own copy, change both to your project and domain.
+2. Tell Google the new return address. In the [Google Cloud console](https://console.cloud.google.com/apis/credentials)
+   (same account, pick the Firebase project), open **APIs & Services >
+   Credentials > OAuth 2.0 Client IDs > Web client (auto created by Google
+   Service)** and add:
+   - to **Authorized JavaScript origins**: `https://www.peakbook.co` and
+     `https://peakbook.co`
+   - to **Authorized redirect URIs**:
+     `https://www.peakbook.co/__/auth/handler` and
+     `https://peakbook.co/__/auth/handler`
 
 ---
 
