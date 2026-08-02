@@ -21,7 +21,11 @@
 
 window.PEAKBOOK_FIREBASE_CONFIG = {
   apiKey: "AIzaSyD2AFRq7WkOWe8KYu7-89AQO7I-moBbtzU",
-  authDomain: "peakbook-3aee4.firebaseapp.com",
+  // The site's own domain, not <project>.firebaseapp.com: the sign-in
+  // popup must stay on the same site as the app or Safari/iOS drops the
+  // auth state mid-flow ("missing initial state"). vercel.json proxies
+  // /__/auth/* to Firebase so this domain can serve the handler.
+  authDomain: "www.peakbook.co",
   projectId: "peakbook-3aee4",
   appId: "1:410263249889:web:51f4ef2ae0065e9e39a8a0",
 };
