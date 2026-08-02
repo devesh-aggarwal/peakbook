@@ -1011,28 +1011,30 @@ function toast(msg) {
   toastTimer = setTimeout(() => (t.hidden = true), 3200);
 }
 
+const DEMO_CLIMBS = {
+  kilimanjaro: [{ date: "2019-08-14", note: "Machame route, 6 days" }],
+  "mont-blanc": [{ date: "2021-07-02", note: "Goûter route" }],
+  elbrus: [{ date: "2021-08-19", note: "South side" }],
+  fuji: [{ date: "2022-08-27", note: "Yoshida trail, sunrise summit" }],
+  toubkal: [{ date: "2022-10-08", note: "" }],
+  rainier: [{ date: "2023-07-15", note: "Disappointment Cleaver" }],
+  hood: [{ date: "2023-05-21", note: "South side, early start" }],
+  "st-helens": [{ date: "2023-06-10", note: "Monitor Ridge" }],
+  orizaba: [{ date: "2023-12-16", note: "Jamapa Glacier" }],
+  cotopaxi: [{ date: "2024-01-20", note: "" }],
+  aconcagua: [{ date: "2024-02-06", note: "Normal route, 14 days" }],
+  triglav: [{ date: "2024-09-01", note: "Via ferrata" }],
+  whitney: [{ date: "2025-06-28", note: "Mountaineer's route" }],
+  "island-peak": [{ date: "2025-11-03", note: "Post-EBC trek" }],
+  matterhorn: [{ date: "2026-07-12", note: "Hörnli ridge with guide" }],
+};
+
 // Demo mode fills the logbook with a sample so the app can be explored, but
 // it stays in memory only: saveClimbs() is a no-op while it's on, so nothing
 // touches localStorage or the cloud, and signing in never inherits it.
 function seedDemo() {
   state.demo = true;
-  state.climbs = {
-    kilimanjaro: [{ date: "2019-08-14", note: "Machame route, 6 days" }],
-    "mont-blanc": [{ date: "2021-07-02", note: "Goûter route" }],
-    elbrus: [{ date: "2021-08-19", note: "South side" }],
-    fuji: [{ date: "2022-08-27", note: "Yoshida trail, sunrise summit" }],
-    toubkal: [{ date: "2022-10-08", note: "" }],
-    rainier: [{ date: "2023-07-15", note: "Disappointment Cleaver" }],
-    hood: [{ date: "2023-05-21", note: "South side, early start" }],
-    "st-helens": [{ date: "2023-06-10", note: "Monitor Ridge" }],
-    orizaba: [{ date: "2023-12-16", note: "Jamapa Glacier" }],
-    cotopaxi: [{ date: "2024-01-20", note: "" }],
-    aconcagua: [{ date: "2024-02-06", note: "Normal route, 14 days" }],
-    triglav: [{ date: "2024-09-01", note: "Via ferrata" }],
-    whitney: [{ date: "2025-06-28", note: "Mountaineer's route" }],
-    "island-peak": [{ date: "2025-11-03", note: "Post-EBC trek" }],
-    matterhorn: [{ date: "2026-07-12", note: "Hörnli ridge with guide" }],
-  };
+  state.climbs = JSON.parse(JSON.stringify(DEMO_CLIMBS)); // edits in demo must not mutate the pristine sample
   render();
   toast("Viewing a demo logbook — nothing is saved");
 }
@@ -1042,6 +1044,51 @@ function exitDemo() {
   state.climbs = loadClimbs();
   render();
   toast("Demo data cleared");
+}
+
+/* ---------- one-time cleanup of demo data that leaked into real logbooks ----------
+   An earlier version of "Try demo data" wrote the sample straight into
+   localStorage, and signing in then merged it into the account's cloud logbook.
+   An ascent is recognized as leaked sample data only when mountain, date, and
+   note all match a demo entry exactly, so genuine climbs are never touched. */
+
+const DEMO_CLEANUP_KEY = "peakbook.demoCleanup"; // set once the user has been asked
+
+const DEMO_FINGERPRINTS = new Set(
+  Object.entries(DEMO_CLIMBS).flatMap(([id, list]) => list.map((a) => `${id}|${a.date}|${a.note}`))
+);
+
+function stripDemoClimbs(climbs) {
+  const cleaned = {};
+  let removed = 0;
+  for (const [id, list] of Object.entries(climbs || {})) {
+    const keep = (list || []).filter((a) => {
+      const isDemo = a && DEMO_FINGERPRINTS.has(`${id}|${a.date}|${a.note || ""}`);
+      if (isDemo) removed++;
+      return !isDemo;
+    });
+    if (keep.length) cleaned[id] = keep;
+  }
+  return { cleaned, removed };
+}
+
+// Runs at boot (catches a contaminated localStorage) and whenever cloud data
+// arrives (catches a contaminated account). Asks at most once per device;
+// if nothing suspicious is present it stays silent and keeps watching.
+function offerDemoCleanup() {
+  if (SHARE_UID || state.demo) return;
+  if (localStorage.getItem(DEMO_CLEANUP_KEY)) return;
+  const { cleaned, removed } = stripDemoClimbs(state.climbs);
+  if (!removed) return;
+  const ok = confirm(
+    `Peakbook found ${removed} sample climb${removed === 1 ? "" : "s"} in your logbook, left over from the old "Try demo data" button. Remove ${removed === 1 ? "it" : "them"}? Your own climbs are kept either way.`
+  );
+  localStorage.setItem(DEMO_CLEANUP_KEY, "done"); // asked and answered — don't nag again on this device
+  if (!ok) return;
+  state.climbs = cleaned;
+  saveClimbs();
+  render();
+  toast(`Removed ${removed} sample climb${removed === 1 ? "" : "s"}`);
 }
 
 document.getElementById("btn-export").addEventListener("click", () => {
@@ -1108,6 +1155,7 @@ window.peakbookApp = {
     writeLocal();
     render();
     if (state.openPeakId && !backdrop.hidden) openPeak(state.openPeakId, state.fromListId);
+    offerDemoCleanup(); // the account may have absorbed demo data under the old behavior
   },
   // Shared-profile (resume) mode: auth.js fetched profiles/<uid> for us.
   showSharedProfile(profile) {
@@ -1327,4 +1375,5 @@ if (SHARE_UID) {
   renderResumeLoading();
 } else {
   render();
+  offerDemoCleanup(); // localStorage may hold demo data written by the old behavior
 }
