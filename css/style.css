@@ -448,18 +448,7 @@ a.ghost-btn { display: block; text-decoration: none; }
 .ring-name { font-size: 12px; font-weight: 600; color: var(--text-secondary); text-align: center; line-height: 1.35; }
 .ring-card.complete .ring-name { color: var(--green); }
 
-/* Timeline of recent climbs */
-.timeline { display: flex; flex-direction: column; }
-.timeline-item {
-  display: flex; gap: 13px;
-  padding: 12px 6px;
-  border-bottom: 1px solid var(--border);
-  cursor: pointer;
-  border-radius: 8px;
-  transition: background 0.15s;
-}
-.timeline-item:hover { background: rgba(213, 221, 235, 0.03); }
-.timeline-item:last-child { border-bottom: none; }
+/* Ascent-row building blocks (used inside the by-year cards) */
 .timeline-flag { font-size: 20px; width: 30px; text-align: center; flex-shrink: 0; padding-top: 2px; }
 .timeline-body { flex: 1; min-width: 0; }
 .timeline-name { font-size: 14px; font-weight: 600; }
@@ -1093,6 +1082,13 @@ body.share-mode .main { padding-bottom: 0; }
   border-bottom: 1px solid var(--border);
 }
 .resume-ascent:last-child { border-bottom: none; }
+.resume-ascent.clickable {
+  cursor: pointer;
+  margin: 0 -10px; padding-left: 10px; padding-right: 10px;
+  border-radius: 8px;
+  transition: background 0.15s;
+}
+.resume-ascent.clickable:hover { background: rgba(213, 221, 235, 0.03); }
 .resume-ascent .timeline-meta em { font-style: italic; color: var(--text-tertiary); }
 .resume-ascent-right { text-align: right; flex-shrink: 0; }
 .resume-ascent-date { font-size: 11px; color: var(--text-tertiary); margin-top: 3px; font-variant-numeric: tabular-nums; }
