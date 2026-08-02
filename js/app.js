@@ -15,6 +15,7 @@ const SHARE_UID = new URLSearchParams(location.search).get("u");
 
 const state = {
   climbs: loadClimbs(),
+  demo: false, // browsing the sample logbook: nothing persists or syncs
   view: "dashboard",
   search: "",
   status: "all", // all | climbed | unclimbed
@@ -64,6 +65,7 @@ function loadUnits() {
 // Called after any change the user makes. Writes locally and, when the
 // auth module is connected and signed in, pushes to the cloud.
 function saveClimbs() {
+  if (state.demo) return; // demo data is a throwaway preview
   writeLocal();
   if (window.peakbookSync && typeof window.peakbookSync.push === "function") {
     window.peakbookSync.push(state.climbs);
@@ -235,6 +237,7 @@ document.querySelectorAll(".nav-item, .tab-item").forEach((btn) => {
    ============================================================ */
 
 function render() {
+  document.getElementById("demo-banner").hidden = !state.demo;
   if (state.view === "dashboard") renderDashboard();
   if (state.view === "explore") renderExplore();
   if (state.view === "map") renderMapMarkers();
@@ -1008,7 +1011,11 @@ function toast(msg) {
   toastTimer = setTimeout(() => (t.hidden = true), 3200);
 }
 
+// Demo mode fills the logbook with a sample so the app can be explored, but
+// it stays in memory only: saveClimbs() is a no-op while it's on, so nothing
+// touches localStorage or the cloud, and signing in never inherits it.
 function seedDemo() {
+  state.demo = true;
   state.climbs = {
     kilimanjaro: [{ date: "2019-08-14", note: "Machame route, 6 days" }],
     "mont-blanc": [{ date: "2021-07-02", note: "Goûter route" }],
@@ -1026,12 +1033,22 @@ function seedDemo() {
     "island-peak": [{ date: "2025-11-03", note: "Post-EBC trek" }],
     matterhorn: [{ date: "2026-07-12", note: "Hörnli ridge with guide" }],
   };
-  saveClimbs();
   render();
-  toast("Demo logbook loaded — 15 climbs");
+  toast("Viewing a demo logbook — nothing is saved");
+}
+
+function exitDemo() {
+  state.demo = false;
+  state.climbs = loadClimbs();
+  render();
+  toast("Demo data cleared");
 }
 
 document.getElementById("btn-export").addEventListener("click", () => {
+  if (state.demo) {
+    toast("You're viewing demo data — exit the demo to export your own logbook");
+    return;
+  }
   const blob = new Blob([JSON.stringify({ app: "peakbook", version: 1, climbs: state.climbs }, null, 2)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -1055,8 +1072,10 @@ document.getElementById("import-file").addEventListener("change", (e) => {
       const data = JSON.parse(reader.result);
       const clean = sanitizeClimbs(data.climbs || data);
       if (!Object.keys(clean).length) throw new Error("no valid climbs");
-      const existing = Object.keys(state.climbs).length;
+      // Confirm against the real logbook — demo climbs aren't the visitor's.
+      const existing = state.demo ? Object.keys(loadClimbs()).length : Object.keys(state.climbs).length;
       if (existing && !confirm(`Replace your current logbook (${existing} peak${existing === 1 ? "" : "s"}) with this file (${Object.keys(clean).length} peaks)?`)) return;
+      state.demo = false; // an imported file is a real logbook
       state.climbs = clean;
       saveClimbs();
       render();
@@ -1077,11 +1096,14 @@ window.peakbookApp = {
   // Read the current logbook (used to merge local climbs into the cloud
   // the first time someone signs in).
   getClimbs() {
-    return state.climbs;
+    // In demo mode the on-screen climbs are the sample, not the visitor's:
+    // hand back the real (stored) logbook so demo data never reaches the cloud.
+    return state.demo ? loadClimbs() : state.climbs;
   },
   // Replace the logbook with data arriving from the cloud, then re-render.
   // Does not call saveClimbs(), so it never echoes back to the cloud.
   applyRemote(climbs) {
+    state.demo = false; // the signed-in logbook always wins over a demo preview
     state.climbs = climbs && typeof climbs === "object" ? climbs : {};
     writeLocal();
     render();
