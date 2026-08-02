@@ -212,11 +212,15 @@ async function init() {
       if (!userDocRef || applyingRemote) return;
       clearTimeout(pushTimer);
       pushTimer = setTimeout(() => {
-        setDoc(userDocRef, { climbs, updatedAt: Date.now() }, { merge: true }).catch((e) =>
+        // mergeFields, not merge: merge deep-merges the climbs map, so a peak
+        // deleted locally would survive in the cloud and echo straight back
+        // through onSnapshot. mergeFields replaces the field wholesale while
+        // still leaving the rest of the document (e.g. `shared`) untouched.
+        setDoc(userDocRef, { climbs, updatedAt: Date.now() }, { mergeFields: ["climbs", "updatedAt"] }).catch((e) =>
           console.error("Peakbook: cloud save failed", e)
         );
         if (share.shared && profileDocRef) {
-          setDoc(profileDocRef, { climbs, updatedAt: Date.now() }, { merge: true }).catch((e) =>
+          setDoc(profileDocRef, { climbs, updatedAt: Date.now() }, { mergeFields: ["climbs", "updatedAt"] }).catch((e) =>
             console.error("Peakbook: public profile save failed", e)
           );
         }
@@ -286,7 +290,7 @@ async function init() {
     const merged = mergeClimbs(local, remote);
     if (JSON.stringify(merged) !== JSON.stringify(remote)) {
       try {
-        await setDoc(userDocRef, { climbs: merged, updatedAt: Date.now() }, { merge: true });
+        await setDoc(userDocRef, { climbs: merged, updatedAt: Date.now() }, { mergeFields: ["climbs", "updatedAt"] });
       } catch (e) {
         console.error("Peakbook: could not seed cloud logbook", e);
       }
