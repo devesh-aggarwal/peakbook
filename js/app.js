@@ -320,25 +320,13 @@ function renderDashboard() {
       <div class="rings-row">${ringSource.map(({ l, p }) => ringCard(l, p)).join("")}</div>
     </div>`;
 
-  // Two columns: recent climbs + charts
+  // Two columns: all climbs by year + charts
   html += `<div class="dash-columns">`;
 
   html += `
     <div class="dash-section">
-      <div class="dash-section-title">Recent climbs</div>
-      <div class="chart-card" style="padding: 8px 16px;">
-        <div class="timeline">
-          ${ascents.slice(0, 8).map((a) => `
-            <div class="timeline-item" onclick="openPeak('${a.mountain.id}')">
-              <div class="timeline-flag">${a.mountain.flag}</div>
-              <div class="timeline-body">
-                <div class="timeline-name">${esc(a.mountain.name)}</div>
-                <div class="timeline-meta">${formatDate(a.date)}${a.note ? " · " + esc(a.note) : ""}</div>
-              </div>
-              <div class="timeline-elev">${peakElev(a.mountain)}</div>
-            </div>`).join("")}
-        </div>
-      </div>
+      <div class="dash-section-title">All climbs</div>
+      ${ascentsByYearHTML(ascents, true)}
     </div>`;
 
   html += `<div>`;
@@ -365,6 +353,37 @@ function ringCard(list, p, interactive = true) {
       </div>
       <div class="ring-name">${esc(list.name)}</div>
     </div>`;
+}
+
+// Every ascent grouped by year, newest year first — the shared "logbook by
+// year" layout used on both the dashboard and the shared-profile resume.
+// `interactive` makes each row open the peak's detail modal (dashboard only;
+// the resume is read-only).
+function ascentsByYearHTML(ascents, interactive = false) {
+  const byYear = new Map(); // insertion order = date-desc, since allAscents() sorts
+  for (const a of ascents) {
+    const y = a.date.slice(0, 4);
+    if (!byYear.has(y)) byYear.set(y, []);
+    byYear.get(y).push(a);
+  }
+  return [...byYear.entries()].map(([year, list]) => `
+    <div class="resume-year">
+      <div class="resume-year-label">${year}</div>
+      <div class="chart-card resume-year-card">
+        ${list.map((a) => `
+          <div class="resume-ascent${interactive ? " clickable" : ""}"${interactive ? ` onclick="openPeak('${a.mountain.id}')"` : ""}>
+            <div class="timeline-flag">${a.mountain.flag}</div>
+            <div class="timeline-body">
+              <div class="timeline-name">${esc(a.mountain.name)}</div>
+              <div class="timeline-meta">${esc(a.mountain.range)} · ${esc(a.mountain.country)}${a.note ? ` — <em>${esc(a.note)}</em>` : ""}</div>
+            </div>
+            <div class="resume-ascent-right">
+              <div class="timeline-elev">${peakElev(a.mountain)}</div>
+              <div class="resume-ascent-date">${formatDate(a.date)}</div>
+            </div>
+          </div>`).join("")}
+      </div>
+    </div>`).join("");
 }
 
 function climbsPerYearChart(ascents) {
@@ -1236,14 +1255,6 @@ function renderResume(profile) {
   const continents = new Set(peaks.map((m) => m.continent));
   const firstYear = ascents[ascents.length - 1].date.slice(0, 4);
 
-  // Ascents grouped by year, newest first (allAscents is already date-desc).
-  const byYear = new Map();
-  for (const a of ascents) {
-    const y = a.date.slice(0, 4);
-    if (!byYear.has(y)) byYear.set(y, []);
-    byYear.get(y).push(a);
-  }
-
   const started = PEAK_LISTS.map((l) => ({ l, p: listProgress(l) })).filter((x) => x.p.done > 0);
 
   document.getElementById("resume-content").innerHTML = resumeShell(`
@@ -1292,24 +1303,7 @@ function renderResume(profile) {
 
     <div class="dash-section">
       <div class="dash-section-title">All ascents</div>
-      ${[...byYear.entries()].map(([year, list]) => `
-        <div class="resume-year">
-          <div class="resume-year-label">${year}</div>
-          <div class="chart-card resume-year-card">
-            ${list.map((a) => `
-              <div class="resume-ascent">
-                <div class="timeline-flag">${a.mountain.flag}</div>
-                <div class="timeline-body">
-                  <div class="timeline-name">${esc(a.mountain.name)}</div>
-                  <div class="timeline-meta">${esc(a.mountain.range)} · ${esc(a.mountain.country)}${a.note ? ` — <em>${esc(a.note)}</em>` : ""}</div>
-                </div>
-                <div class="resume-ascent-right">
-                  <div class="timeline-elev">${peakElev(a.mountain)}</div>
-                  <div class="resume-ascent-date">${formatDate(a.date)}</div>
-                </div>
-              </div>`).join("")}
-          </div>
-        </div>`).join("")}
+      ${ascentsByYearHTML(ascents)}
     </div>
 
     <footer class="resume-footer">
