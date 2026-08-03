@@ -809,12 +809,16 @@ function updateAscent(e, id, index) {
 
 function deleteAscent(id, index) {
   const list = state.climbs[id] || [];
+  const ascent = list[index];
+  if (!ascent) return;
+  if (!confirm(`Remove this climb from your logbook? You can always add it back.`)) return;
   list.splice(index, 1);
   if (!list.length) delete state.climbs[id];
   state.editingAscentIdx = null; // indices shifted; a stale edit form would hit the wrong entry
   saveClimbs();
   render();
   openPeak(id, state.fromListId); // refresh the modal in place
+  toast("Climb removed");
 }
 
 function celebrate(id) {
