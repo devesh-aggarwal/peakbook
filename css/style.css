@@ -1458,8 +1458,6 @@ body.share-mode .feedback-btn-floating { display: none; }
   margin-top: 5pt;
 }
 #print-resume .pr-meta { font-size: 9.5pt; color: #4a4f57; margin-top: 7pt; }
-#print-resume .pr-verify { font-size: 9pt; color: #4a4f57; margin-top: 3pt; }
-#print-resume .pr-verify a { color: #b3543a; font-weight: 600; text-decoration: none; }
 
 #print-resume h2 {
   font-size: 9.5pt;
@@ -1500,6 +1498,7 @@ body.share-mode .feedback-btn-floating { display: none; }
   justify-content: space-between;
   gap: 10pt;
 }
+#print-resume .pr-foot a { color: #b3543a; font-weight: 600; text-decoration: none; }
 
 @media print {
   @page { margin: 14mm 15mm; }
