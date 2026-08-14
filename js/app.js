@@ -1806,7 +1806,8 @@ const DEMO_CLIMBS = {
 
 // The résumé extras the sample logbook can't derive, so "Résumé PDF" produces
 // a complete document in demo mode instead of a header over a list of climbs.
-// Highlights key off the DEMO_CLIMBS ids above.
+// No highlights: like a real logbook, the demo's bullets come from its climb
+// notes (via the builder's prefill), never from invented content.
 const DEMO_RESUME = {
   name: "Alex Sample",
   skills: [
@@ -1822,14 +1823,6 @@ const DEMO_RESUME = {
     { name: "Wilderness First Responder", org: "NOLS", year: "2023" },
     { name: "Rock Rescue & Self-Rescue", org: "AMGA", year: "2024" },
   ],
-  highlights: {
-    matterhorn: ["Hörnli ridge in a 9-hour round trip from the hut", "Led the descent rappels for a party of three"],
-    aconcagua: ["14-day expedition, carried loads to Camp 3 at 5,970 m", "Summited on the first weather window"],
-    "island-peak": ["Fixed the summit headwall line after a night at high camp"],
-    rainier: ["Disappointment Cleaver in a single push from Camp Muir"],
-    orizaba: ["Pre-dawn start on the Jamapa Glacier, North America's third-highest point"],
-    kilimanjaro: ["First 5,000 m summit — six days on the Machame route"],
-  },
 };
 
 // Demo mode fills the logbook and the résumé with a sample so the app can be
