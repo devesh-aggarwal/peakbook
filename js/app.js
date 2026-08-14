@@ -8,6 +8,7 @@ const STORAGE_KEY = "peakbook.climbs";
 const LEGACY_STORAGE_KEY = "summit.climbs"; // the app's former name
 const UNITS_KEY = "peakbook.units";         // "m" | "ft"
 const CUSTOM_KEY = "peakbook.custom";       // peaks this person added themselves
+const RESUME_KEY = "peakbook.resume";       // skills, certs, per-peak highlight bullets
 
 // When the URL is a shared-profile link (?u=<uid>), the app boots into a
 // read-only "climbing resume" view of that person's public profile instead
@@ -18,6 +19,7 @@ const state = {
   climbs: loadClimbs(),
   custom: {}, // { [id]: peak } — private to this logbook, never global. Filled in below,
               // once the sanitizer it depends on has been declared.
+  resume: null, // skills / certs / highlights for the climbing résumé — also filled in below
   demo: false, // browsing the sample logbook: nothing persists or syncs
   view: "dashboard",
   search: "",
@@ -104,7 +106,7 @@ function writeCustom() {
 
 function pushCloud() {
   if (window.peakbookSync && typeof window.peakbookSync.push === "function") {
-    window.peakbookSync.push(state.climbs, state.custom);
+    window.peakbookSync.push(state.climbs, state.custom, state.resume);
   }
 }
 
@@ -201,6 +203,77 @@ function sanitizeCustomPeaks(raw) {
 // them into byId before anything tries to resolve a climb against them.
 state.custom = loadCustom();
 refreshCustomIndex();
+
+/* ---------- climbing résumé ----------
+   The extras a logbook can't derive: skills, courses/certifications (avy
+   courses, first aid, guide certs), and per-peak highlight bullets. Like the
+   logbook it lives on the device, syncs to the person's own cloud document,
+   and rides along with a published profile — so, like custom peaks, anything
+   arriving from storage, an import file, or the cloud is sanitized here first.
+   Every string is escaped at render time. */
+
+function sanitizeResume(raw) {
+  const clean = { name: "", skills: [], certs: [], highlights: {} };
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return clean;
+  clean.name = cleanStr(raw.name, 60);
+  if (Array.isArray(raw.skills)) {
+    const seen = new Set();
+    for (const s of raw.skills) {
+      const v = cleanStr(s, 60);
+      if (!v || seen.has(v.toLowerCase())) continue;
+      seen.add(v.toLowerCase());
+      clean.skills.push(v);
+      if (clean.skills.length >= 30) break;
+    }
+  }
+  if (Array.isArray(raw.certs)) {
+    for (const c of raw.certs) {
+      if (!c || typeof c !== "object") continue;
+      const name = cleanStr(c.name, 80);
+      if (!name) continue;
+      clean.certs.push({ name, org: cleanStr(c.org, 80), year: cleanStr(c.year, 20) });
+      if (clean.certs.length >= 20) break;
+    }
+  }
+  // Highlights are kept even when the peak id isn't currently resolvable (a
+  // custom peak may not have arrived yet) — render sites only show bullets
+  // for peaks that exist and are climbed, so orphans are invisible, not lost.
+  if (raw.highlights && typeof raw.highlights === "object" && !Array.isArray(raw.highlights)) {
+    for (const [id, list] of Object.entries(raw.highlights)) {
+      if (!/^[a-z0-9-]{1,40}$/.test(id) || !Array.isArray(list)) continue;
+      const bullets = list.map((b) => cleanStr(b, 160)).filter(Boolean).slice(0, 6);
+      if (bullets.length) clean.highlights[id] = bullets;
+      if (Object.keys(clean.highlights).length >= 300) break;
+    }
+  }
+  return clean;
+}
+
+function loadResume() {
+  if (SHARE_UID) return sanitizeResume(null); // resume view shows the profile owner's extras, not ours
+  try {
+    return sanitizeResume(JSON.parse(localStorage.getItem(RESUME_KEY) || "{}"));
+  } catch {
+    return sanitizeResume(null);
+  }
+}
+
+function writeResume() {
+  try {
+    localStorage.setItem(RESUME_KEY, JSON.stringify(state.resume));
+  } catch {
+    /* private mode — the résumé still works for this session */
+  }
+}
+
+// Résumé extras are the person's own reference data, like custom peaks: they
+// persist during a demo, but the cloud push is skipped so the sample stays put.
+function saveResume() {
+  writeResume();
+  if (!state.demo) pushCloud();
+}
+
+state.resume = loadResume();
 
 // Keep only entries that look like real ascents of peaks we know about —
 // the dataset plus any custom peaks currently registered in byId. Guards
@@ -500,14 +573,23 @@ function ringCard(list, p, interactive = true) {
 // Every ascent grouped by year, newest year first — the shared "logbook by
 // year" layout used on both the dashboard and the shared-profile resume.
 // `interactive` makes each row open the peak's detail modal (dashboard only;
-// the resume is read-only).
-function ascentsByYearHTML(ascents, interactive = false) {
+// the resume is read-only). `highlights` ({ [mountainId]: [bullet] }) renders
+// a mountain's résumé bullets under its most recent ascent (resume only).
+function ascentsByYearHTML(ascents, interactive = false, highlights = null) {
   const byYear = new Map(); // insertion order = date-desc, since allAscents() sorts
   for (const a of ascents) {
     const y = a.date.slice(0, 4);
     if (!byYear.has(y)) byYear.set(y, []);
     byYear.get(y).push(a);
   }
+  const seenHl = new Set(); // bullets are per-mountain — show them once, on the newest ascent
+  const bulletsFor = (m) => {
+    if (!highlights || seenHl.has(m.id)) return "";
+    seenHl.add(m.id);
+    const list = highlights[m.id] || [];
+    if (!list.length) return "";
+    return `<ul class="resume-bullets">${list.map((b) => `<li>${esc(b)}</li>`).join("")}</ul>`;
+  };
   return [...byYear.entries()].map(([year, list]) => `
     <div class="resume-year">
       <div class="resume-year-label">${year}</div>
@@ -518,6 +600,7 @@ function ascentsByYearHTML(ascents, interactive = false) {
             <div class="timeline-body">
               <div class="timeline-name">${esc(a.mountain.name)}</div>
               <div class="timeline-meta">${esc(a.mountain.range)} · ${esc(a.mountain.country)}${a.note ? ` — <em>${esc(a.note)}</em>` : ""}</div>
+              ${bulletsFor(a.mountain)}
             </div>
             <div class="resume-ascent-right">
               <div class="timeline-elev">${peakElev(a.mountain)}</div>
@@ -1361,6 +1444,260 @@ for (const id of ["btn-share", "btn-share-dash"]) {
 }
 
 /* ============================================================
+   Climbing résumé: builder + PDF export
+   The builder edits the résumé extras (skills, certifications and
+   courses, per-peak highlight bullets); export renders a clean,
+   print-formatted résumé into #print-resume and hands it to the
+   browser's PDF printer. Also available on a public ?u= profile,
+   where it exports the profile owner's résumé.
+   ============================================================ */
+
+function certRowHTML(c = { name: "", org: "", year: "" }) {
+  return `
+    <div class="cert-row" data-cert-row>
+      <input type="text" data-cert-name maxlength="80" placeholder="AIARE 1 — Avalanche Rescue" value="${esc(c.name)}" aria-label="Course or certification" />
+      <input type="text" data-cert-org maxlength="80" placeholder="AIARE" value="${esc(c.org)}" aria-label="Organization" />
+      <input type="text" data-cert-year maxlength="20" placeholder="2024" value="${esc(c.year)}" aria-label="Year" />
+      <button type="button" class="cert-remove" title="Remove" aria-label="Remove this entry">✕</button>
+    </div>`;
+}
+
+function openResumeBuilder() {
+  if (state.demo) {
+    toast("You're viewing demo data — exit the demo to build your résumé");
+    return;
+  }
+  state.openPeakId = null;
+  state.fromListId = null;
+  const r = state.resume;
+  const peaks = climbedPeaks().sort((a, b) => b.elevation - a.elevation);
+  const defaultName = r.name || window.peakbookAccountName || "";
+
+  openModal(`
+    <div class="modal-hero">
+      <button class="modal-close" onclick="closeModal()">✕</button>
+      <div class="modal-title">Climbing résumé</div>
+      <div class="modal-sub">Skills, courses, and expedition highlights — exported as a clean PDF</div>
+    </div>
+    <div class="modal-body">
+      <form class="log-form resume-form" onsubmit="saveResumeBuilder(event, false)">
+        <div>
+          <label for="rb-name">Name on the résumé</label>
+          <input type="text" id="rb-name" maxlength="60" autocomplete="off" placeholder="Your name" value="${esc(defaultName)}" />
+        </div>
+
+        <div>
+          <label for="rb-skills">Skills <span style="font-weight:400">(one per line)</span></label>
+          <textarea id="rb-skills" rows="4" placeholder="Glacier travel &amp; crevasse rescue&#10;AD+ alpine routes&#10;Expedition planning">${esc(r.skills.join("\n"))}</textarea>
+        </div>
+
+        <div>
+          <label>Certifications &amp; courses</label>
+          <div id="rb-certs">${r.certs.map((c) => certRowHTML(c)).join("")}</div>
+          <button type="button" class="secondary-btn cert-add" id="rb-cert-add">+ Add a course or cert</button>
+          <p class="form-hint">Avalanche courses, wilderness first aid, guide certs — anything that belongs on a climbing résumé.</p>
+        </div>
+
+        ${peaks.length ? `
+        <div>
+          <label>Expedition highlights <span style="font-weight:400">(one bullet per line)</span></label>
+          <p class="form-hint" style="margin:0 0 10px">Add bullets under a summit to highlight your contribution to the expedition.</p>
+          <div class="hl-list">
+            ${peaks.map((m) => `
+              <div class="hl-row">
+                <div class="hl-peak"><span>${m.flag}</span> <strong>${esc(m.name)}</strong> <span class="hl-elev">${peakElev(m)}</span></div>
+                <textarea rows="2" maxlength="1000" data-highlight-id="${esc(m.id)}"
+                  placeholder="Led the rope team on summit day…">${esc((r.highlights[m.id] || []).join("\n"))}</textarea>
+              </div>`).join("")}
+          </div>
+        </div>` : `
+        <p class="form-hint">Log a climb and it'll appear here with room for highlight bullets.</p>`}
+
+        <div class="resume-actions">
+          <button type="submit" class="secondary-btn">Save</button>
+          <button type="button" class="primary-btn" onclick="saveResumeBuilder(event, true)">Save &amp; export PDF</button>
+        </div>
+        <p class="form-hint" id="rb-verify-hint"></p>
+      </form>
+    </div>`);
+
+  document.getElementById("rb-cert-add").addEventListener("click", () => {
+    const wrap = document.getElementById("rb-certs");
+    wrap.insertAdjacentHTML("beforeend", certRowHTML());
+    wrap.lastElementChild.querySelector("[data-cert-name]").focus();
+  });
+  document.getElementById("rb-certs").addEventListener("click", (e) => {
+    const btn = e.target.closest(".cert-remove");
+    if (btn) btn.closest("[data-cert-row]").remove();
+  });
+
+  // The PDF can carry a link to the live profile as proof the climbs are on
+  // record — tell the person whether theirs will. No hint on an unconfigured
+  // copy, where publishing isn't possible anyway.
+  if (window.peakbookShare) {
+    window.peakbookShare.getState().then((s) => {
+      const hint = document.getElementById("rb-verify-hint");
+      if (!hint) return;
+      if (s.signedIn && s.shared) {
+        hint.textContent = "Your PDF will carry a link to your live profile, so anyone can verify the climbs.";
+      } else if (s.configured) {
+        hint.textContent = "Tip: publish your profile (Share) first and the PDF will carry a link to it, so anyone can verify the climbs.";
+      }
+    });
+  }
+}
+
+function saveResumeBuilder(e, exportAfter) {
+  e.preventDefault();
+  const lines = (v) => v.split("\n").map((s) => s.trim()).filter(Boolean);
+  const certs = [...document.querySelectorAll("[data-cert-row]")]
+    .map((row) => ({
+      name: row.querySelector("[data-cert-name]").value.trim(),
+      org: row.querySelector("[data-cert-org]").value.trim(),
+      year: row.querySelector("[data-cert-year]").value.trim(),
+    }))
+    .filter((c) => c.name);
+  // Start from the stored highlights so bullets for peaks not shown in this
+  // form (ascent deleted, custom peak removed) survive rather than vanish.
+  const highlights = { ...state.resume.highlights };
+  document.querySelectorAll("[data-highlight-id]").forEach((ta) => {
+    const bullets = lines(ta.value);
+    if (bullets.length) highlights[ta.dataset.highlightId] = bullets;
+    else delete highlights[ta.dataset.highlightId];
+  });
+  state.resume = sanitizeResume({
+    name: document.getElementById("rb-name").value.trim(),
+    skills: lines(document.getElementById("rb-skills").value),
+    certs,
+    highlights,
+  });
+  saveResume();
+  closeModal();
+  if (exportAfter) exportResumePDF();
+  else toast("Résumé saved");
+}
+
+async function exportResumePDF() {
+  let name, url = "";
+  if (SHARE_UID) {
+    // Viewing someone's public profile: export *their* résumé, and the page
+    // being open right now is itself the verification link.
+    name = state.sharedName || "A climber";
+    url = location.href;
+  } else {
+    name = state.resume.name || window.peakbookAccountName || "A climber";
+    try {
+      const s = window.peakbookShare ? await window.peakbookShare.getState() : null;
+      if (s && s.signedIn && s.shared) url = window.peakbookShare.url();
+    } catch {
+      /* no verification link — the PDF still works */
+    }
+  }
+  buildPrintResume(name, url);
+  // The print stylesheet swaps the app out for #print-resume only while this
+  // class is on; the browser's own "Save as PDF" does the rest. The class and
+  // title stay on until printing ends so the preview never goes blank.
+  const prevTitle = document.title;
+  document.title = `${name} — Climbing Résumé`;
+  document.body.classList.add("print-resume-mode");
+  window.addEventListener("afterprint", () => {
+    document.title = prevTitle;
+    document.body.classList.remove("print-resume-mode");
+  }, { once: true });
+  window.print();
+}
+
+function buildPrintResume(name, url) {
+  const r = state.resume;
+  const peaks = climbedPeaks();
+  const ascents = allAscents();
+  const countries = new Set(peaks.map((m) => m.country.split(" / ")[0]));
+  const continents = new Set(peaks.map((m) => m.continent));
+  const highest = peaks.length ? peaks.reduce((a, b) => (a.elevation > b.elevation ? a : b)) : null;
+  const firstYear = ascents.length ? ascents[ascents.length - 1].date.slice(0, 4) : null;
+
+  const meta = ascents.length
+    ? [
+        `${peaks.length} peak${peaks.length === 1 ? "" : "s"} · ${ascents.length} ascent${ascents.length === 1 ? "" : "s"}`,
+        `high point ${peakElev(highest)} (${esc(highest.name)})`,
+        `${countries.size} countr${countries.size === 1 ? "y" : "ies"} · ${continents.size}/7 continents`,
+        `climbing since ${firstYear}`,
+      ].join("&ensp;·&ensp;")
+    : "No ascents logged yet";
+
+  const byYear = new Map(); // insertion order = date-desc, since allAscents() sorts
+  for (const a of ascents) {
+    const y = a.date.slice(0, 4);
+    if (!byYear.has(y)) byYear.set(y, []);
+    byYear.get(y).push(a);
+  }
+
+  const seenHl = new Set(); // per-mountain bullets print once, on the newest ascent
+  const entryHTML = (a) => {
+    const m = a.mountain;
+    const bullets = [];
+    if (a.note) bullets.push(`<li class="pr-note">${esc(a.note)}</li>`);
+    if (!seenHl.has(m.id)) {
+      seenHl.add(m.id);
+      for (const b of r.highlights[m.id] || []) bullets.push(`<li>${esc(b)}</li>`);
+    }
+    return `
+      <div class="pr-entry">
+        <div class="pr-entry-head">
+          <span class="pr-peak">${esc(m.name)}</span>
+          <span class="pr-peak-meta">${metaLine(peakElev(m), m.range, m.country)}</span>
+          <span class="pr-date">${formatDate(a.date)}</span>
+        </div>
+        ${bullets.length ? `<ul class="pr-bullets">${bullets.join("")}</ul>` : ""}
+      </div>`;
+  };
+
+  document.getElementById("print-resume").innerHTML = `
+    <header class="pr-head">
+      <h1>${esc(name)}</h1>
+      <div class="pr-role">Climbing Résumé</div>
+      <div class="pr-meta">${meta}</div>
+      ${url ? `<div class="pr-verify">Verified live logbook — every climb below is on record at <a href="${esc(url)}">${esc(url)}</a></div>` : ""}
+    </header>
+
+    ${r.skills.length ? `
+      <section class="pr-section">
+        <h2>Skills</h2>
+        <div class="pr-skills">${r.skills.map(esc).join("&ensp;·&ensp;")}</div>
+      </section>` : ""}
+
+    ${r.certs.length ? `
+      <section class="pr-section">
+        <h2>Certifications &amp; Training</h2>
+        ${r.certs.map((c) => `
+          <div class="pr-cert">
+            <span class="pr-cert-name">${esc(c.name)}</span>
+            ${c.org ? `<span class="pr-cert-org">${esc(c.org)}</span>` : ""}
+            ${c.year ? `<span class="pr-cert-year">${esc(c.year)}</span>` : ""}
+          </div>`).join("")}
+      </section>` : ""}
+
+    <section class="pr-section">
+      <h2>Expeditions &amp; Ascents</h2>
+      ${ascents.length
+        ? [...byYear.entries()].map(([year, list]) => `
+            <h3>${year}</h3>
+            ${list.map(entryHTML).join("")}`).join("")
+        : `<p class="pr-empty">No ascents logged yet.</p>`}
+    </section>
+
+    <footer class="pr-foot">
+      <span>Generated ${formatDate(todayISO())} from a Peakbook logbook</span>
+      <span>peakbook.co</span>
+    </footer>`;
+}
+
+for (const id of ["btn-resume", "btn-resume-dash"]) {
+  const btn = document.getElementById(id);
+  if (btn) btn.addEventListener("click", openResumeBuilder);
+}
+
+/* ============================================================
    Toast, demo data, import/export
    ============================================================ */
 
@@ -1458,9 +1795,9 @@ document.getElementById("btn-export").addEventListener("click", () => {
     toast("You're viewing demo data — exit the demo to export your own logbook");
     return;
   }
-  // version 2 adds `custom`; version 1 files (climbs only) still import fine.
+  // version 3 adds `resume`; version 2 added `custom`. Older files still import fine.
   const blob = new Blob(
-    [JSON.stringify({ app: "peakbook", version: 2, climbs: state.climbs, custom: state.custom }, null, 2)],
+    [JSON.stringify({ app: "peakbook", version: 3, climbs: state.climbs, custom: state.custom, resume: state.resume }, null, 2)],
     { type: "application/json" }
   );
   const url = URL.createObjectURL(blob);
@@ -1501,6 +1838,12 @@ document.getElementById("import-file").addEventListener("change", (e) => {
       }
       state.demo = false; // an imported file is a real logbook
       state.climbs = clean;
+      // Files that carry résumé extras restore them too; older files leave
+      // whatever is already here alone.
+      if (data.resume !== undefined) {
+        state.resume = sanitizeResume(data.resume);
+        saveResume();
+      }
       saveClimbs();
       saveCustom();
       render();
@@ -1537,9 +1880,13 @@ window.peakbookApp = {
   getCustom() {
     return state.custom;
   },
+  // Résumé extras (skills, certs, highlight bullets), same treatment.
+  getResume() {
+    return state.resume;
+  },
   // Replace the logbook with data arriving from the cloud, then re-render.
   // Does not call saveClimbs(), so it never echoes back to the cloud.
-  applyRemote(climbs, custom) {
+  applyRemote(climbs, custom, resume) {
     state.demo = false; // the signed-in logbook always wins over a demo preview
     // `undefined` means the account predates custom peaks — keep what's on this
     // device. An empty object is a real state (all of them deleted elsewhere).
@@ -1547,6 +1894,11 @@ window.peakbookApp = {
       state.custom = sanitizeCustomPeaks(custom);
       refreshCustomIndex();
       writeCustom();
+    }
+    // Same rule for résumé extras: absent means the account predates them.
+    if (resume !== undefined) {
+      state.resume = sanitizeResume(resume);
+      writeResume();
     }
     state.climbs = climbs && typeof climbs === "object" ? climbs : {};
     writeLocal();
@@ -1564,6 +1916,7 @@ window.peakbookApp = {
     state.custom = sanitizeCustomPeaks(profile && profile.customPeaks);
     refreshCustomIndex();
     state.climbs = sanitizeClimbs(profile && profile.climbs);
+    state.resume = sanitizeResume(profile && profile.resume);
     renderResume(profile || {});
   },
   sharedProfileError(kind) {
@@ -1579,7 +1932,7 @@ window.toast = toast;
    Shared-profile "climbing resume" view (read-only, at ?u=<uid>)
    ============================================================ */
 
-function resumeShell(inner) {
+function resumeShell(inner, withPdf = false) {
   return `
     <div class="resume">
       <div class="resume-topbar">
@@ -1587,7 +1940,10 @@ function resumeShell(inner) {
           <span class="brand-mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m8 3 4 8 5-5 5 15H2L8 3z"/></svg></span>
           Peakbook
         </a>
-        <a class="secondary-btn" href="${location.pathname}">Start your own logbook</a>
+        <div class="resume-topbar-actions">
+          ${withPdf ? `<button class="secondary-btn" onclick="exportResumePDF()" title="Save this résumé as a PDF">Save as PDF</button>` : ""}
+          <a class="secondary-btn" href="${location.pathname}">Start your own logbook</a>
+        </div>
       </div>
       ${inner}
     </div>`;
@@ -1612,6 +1968,7 @@ function renderResumeError(kind) {
 
 function renderResume(profile) {
   const name = (profile.name || "").trim() || "A climber";
+  state.sharedName = name; // the PDF export prints the profile owner's name
   const peaks = climbedPeaks();
   const ascents = allAscents();
   document.title = `${name} — Climbing resume · Peakbook`;
@@ -1640,6 +1997,8 @@ function renderResume(profile) {
   const firstYear = ascents[ascents.length - 1].date.slice(0, 4);
 
   const started = PEAK_LISTS.map((l) => ({ l, p: listProgress(l) })).filter((x) => x.p.done > 0);
+  const rSkills = state.resume.skills;
+  const rCerts = state.resume.certs;
 
   document.getElementById("resume-content").innerHTML = resumeShell(`
     <header class="resume-hero">
@@ -1674,6 +2033,25 @@ function renderResume(profile) {
       </div>
     </div>
 
+    ${rSkills.length ? `
+      <div class="dash-section">
+        <div class="dash-section-title">Skills</div>
+        <div class="chart-card resume-skills">${rSkills.map((s) => `<span class="skill-chip">${esc(s)}</span>`).join("")}</div>
+      </div>` : ""}
+
+    ${rCerts.length ? `
+      <div class="dash-section">
+        <div class="dash-section-title">Certifications &amp; training</div>
+        <div class="chart-card resume-certs">
+          ${rCerts.map((c) => `
+            <div class="resume-cert">
+              <span class="resume-cert-name">${esc(c.name)}</span>
+              ${c.org ? `<span class="resume-cert-org">${esc(c.org)}</span>` : ""}
+              ${c.year ? `<span class="resume-cert-year">${esc(c.year)}</span>` : ""}
+            </div>`).join("")}
+        </div>
+      </div>` : ""}
+
     <div class="dash-section">
       <div class="dash-section-title">Summits on the map</div>
       <div id="resume-map" class="resume-map"></div>
@@ -1687,12 +2065,12 @@ function renderResume(profile) {
 
     <div class="dash-section">
       <div class="dash-section-title">All ascents</div>
-      ${ascentsByYearHTML(ascents)}
+      ${ascentsByYearHTML(ascents, false, state.resume.highlights)}
     </div>
 
     <footer class="resume-footer">
       <p>Logbook kept on <a href="${location.pathname}">Peakbook</a> — a free climbing logbook &amp; peak tracker.</p>
-    </footer>`);
+    </footer>`, true);
 
   initResumeMap(peaks);
 }

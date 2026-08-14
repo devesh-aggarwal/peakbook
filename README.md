@@ -12,6 +12,7 @@ A simple website for tracking the mountains you've climbed, inspired by flight-t
 - **Peak lists:** track your progress on the Seven Summits, the 8,000ers, the Volcanic Seven Summits, Alpine Classics, Cascade Volcanoes, the Colorado 14ers, Andes & Patagonia, the Country High Points, the US State High Points, and New Zealand Classics, with progress rings and completion states.
 - **Accounts (optional):** Sign in with Google to get an account whose logbook syncs across devices, powered by Firebase. Setup is in [SETUP.md](SETUP.md). Without it, the app runs in local-only mode.
 - **Share your profile:** publish a public "climbing resume" at a shareable link (`?u=<uid>`) — your stats, a map of your summits, list progress, and every ascent by year. It stays in sync as you log climbs, and you can unpublish at any time. Requires the Firebase setup above.
+- **Résumé PDF:** export your logbook as a clean, print-formatted climbing résumé — with a skills section, certifications & courses (avy courses, first aid, guide certs), and per-peak bullets highlighting your contribution to each expedition. If your profile is published, the PDF carries a link to it so anyone can verify the climbs; a public profile page has its own "Save as PDF" button too. Works entirely offline via the browser's print-to-PDF.
 - **Export / import:** your logbook is stored locally (localStorage) and can be exported to or restored from a JSON file.
 - **Feedback:** a small bug button beside the sidebar's GitHub link (floating above the tab bar on phones) opens a short form for bugs, feature ideas, and improvements. It pre-fills a GitHub issue on this repo, so filing is one click from there.
 
@@ -38,4 +39,5 @@ Then open http://localhost:8420.
 
 - Data model: `{ [mountainId]: [{ date, note }] }` under the `peakbook.climbs` localStorage key, kept deliberately simple so it can move to a backend or native app later.
 - User-added peaks live under `peakbook.custom` as `{ [peakId]: peak }`, keyed by a `custom-`-prefixed id that can never collide with a dataset id. Everything arriving from storage, an import file, or the cloud goes through `sanitizeCustomPeaks()` first — a published resume renders its owner's peaks on a stranger's screen, so flags are whitelisted against the dataset and every text field is escaped at render.
+- Résumé extras (name, skills, certifications, per-peak highlight bullets) live under `peakbook.resume`, sync and publish alongside the logbook, and pass through `sanitizeResume()` on every path in, with the same escape-at-render rule.
 - The only external dependencies are Leaflet (CDN) and CARTO map tiles; everything else is vanilla HTML/CSS/JS.

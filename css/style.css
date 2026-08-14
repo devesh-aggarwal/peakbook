@@ -1245,6 +1245,78 @@ body.share-mode .feedback-btn-floating { display: none; }
 }
 .fb-hint { font-size: 11.5px; color: var(--text-tertiary); line-height: 1.55; }
 
+/* ============ Résumé builder (modal) ============ */
+
+.resume-form .cert-row {
+  display: grid;
+  grid-template-columns: 1fr 110px 64px 30px;
+  gap: 8px;
+  margin-bottom: 8px;
+  align-items: center;
+}
+.cert-remove {
+  color: var(--text-tertiary);
+  font-size: 13px;
+  border-radius: 8px;
+  padding: 6px 0;
+}
+.cert-remove:hover { color: #ff8080; background: rgba(255, 110, 110, 0.08); }
+.modal .log-form button.cert-add { padding: 8px 13px; font-size: 12.5px; }
+
+.hl-list { display: flex; flex-direction: column; gap: 12px; }
+.hl-peak {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  font-size: 13px;
+  margin-bottom: 6px;
+}
+.hl-peak strong { font-weight: 650; }
+.hl-elev { color: var(--text-tertiary); font-size: 12px; }
+.hl-row textarea { min-height: 54px; }
+
+.resume-actions { display: flex; gap: 10px; margin-top: 4px; }
+.resume-actions button { flex: 1; }
+
+@media (max-width: 560px) {
+  .resume-form .cert-row { grid-template-columns: 1fr 84px 30px; }
+  .resume-form .cert-row [data-cert-name] { grid-column: 1 / -1; }
+}
+
+/* ============ Skills & certs on the shared resume page ============ */
+
+.resume-topbar-actions { display: flex; align-items: center; gap: 10px; }
+
+.resume-skills { display: flex; flex-wrap: wrap; gap: 8px; padding: 16px 18px; }
+.skill-chip {
+  border: 1px solid rgba(213, 221, 235, 0.14);
+  border-radius: 999px;
+  padding: 5px 13px;
+  font-size: 12.5px;
+  color: var(--text-secondary);
+}
+
+.resume-certs { padding: 8px 18px; }
+.resume-cert {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(213, 221, 235, 0.07);
+}
+.resume-cert:last-child { border-bottom: none; }
+.resume-cert-name { font-weight: 600; font-size: 13.5px; }
+.resume-cert-org { color: var(--text-tertiary); font-size: 12.5px; }
+.resume-cert-year {
+  margin-left: auto;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.resume-bullets { margin: 7px 0 2px; padding-left: 17px; }
+.resume-bullets li { font-size: 12.5px; color: var(--text-secondary); line-height: 1.5; margin: 3px 0; }
+
 /* ============ Mobile ============ */
 
 .tabbar { display: none; }
@@ -1343,4 +1415,89 @@ body.share-mode .feedback-btn-floating { display: none; }
 /* Reduced motion */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
+
+/* ============ Printable climbing résumé ============
+   #print-resume is filled by buildPrintResume() and lives hidden at the end
+   of <body>. While body.print-resume-mode is set, the print stylesheet swaps
+   the app out for it — the browser's "Save as PDF" produces the résumé.
+   Its inner styles are declared for all media (not just print) so the layout
+   can be previewed and tested on screen by unhiding the container. */
+
+#print-resume {
+  display: none;
+  background: #fff;
+  color: #1a1d21;
+  font-family: "Inter", -apple-system, "Segoe UI", sans-serif;
+  font-size: 10.5pt;
+  line-height: 1.5;
+}
+
+#print-resume .pr-head { border-bottom: 2px solid #1a1d21; padding-bottom: 10pt; }
+#print-resume h1 {
+  font-family: "Fraunces", Georgia, serif;
+  font-weight: 600;
+  font-size: 25pt;
+  letter-spacing: -0.01em;
+  line-height: 1.1;
+  color: #101114;
+  margin: 0;
+}
+#print-resume .pr-role {
+  text-transform: uppercase;
+  letter-spacing: 0.22em;
+  font-size: 8.5pt;
+  font-weight: 700;
+  color: #b3543a;
+  margin-top: 5pt;
+}
+#print-resume .pr-meta { font-size: 9.5pt; color: #4a4f57; margin-top: 7pt; }
+#print-resume .pr-verify { font-size: 9pt; color: #4a4f57; margin-top: 3pt; }
+#print-resume .pr-verify a { color: #b3543a; font-weight: 600; text-decoration: none; }
+
+#print-resume h2 {
+  font-size: 9.5pt;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: #1a1d21;
+  border-bottom: 1px solid #d9d5cf;
+  padding-bottom: 3pt;
+  margin: 14pt 0 7pt;
+}
+#print-resume h3 { font-size: 10pt; font-weight: 700; color: #b3543a; margin: 9pt 0 4pt; }
+
+#print-resume .pr-skills { font-size: 10pt; }
+
+#print-resume .pr-cert { display: flex; align-items: baseline; gap: 6pt; margin: 4pt 0; }
+#print-resume .pr-cert-name { font-weight: 600; }
+#print-resume .pr-cert-org { color: #4a4f57; }
+#print-resume .pr-cert-year { margin-left: auto; color: #4a4f57; font-variant-numeric: tabular-nums; }
+
+#print-resume .pr-entry { margin: 0 0 7pt; break-inside: avoid; page-break-inside: avoid; }
+#print-resume .pr-entry-head { display: flex; align-items: baseline; gap: 8pt; }
+#print-resume .pr-peak { font-weight: 650; font-size: 10.5pt; }
+#print-resume .pr-peak-meta { color: #4a4f57; font-size: 9pt; }
+#print-resume .pr-date { margin-left: auto; color: #4a4f57; font-size: 9pt; white-space: nowrap; }
+#print-resume .pr-bullets { margin: 2pt 0 0; padding-left: 14pt; }
+#print-resume .pr-bullets li { margin: 1.5pt 0; font-size: 9.8pt; }
+#print-resume .pr-note { font-style: italic; }
+#print-resume .pr-empty { color: #4a4f57; font-style: italic; }
+
+#print-resume .pr-foot {
+  margin-top: 16pt;
+  padding-top: 6pt;
+  border-top: 1px solid #d9d5cf;
+  font-size: 8.5pt;
+  color: #6a707a;
+  display: flex;
+  justify-content: space-between;
+  gap: 10pt;
+}
+
+@media print {
+  @page { margin: 14mm 15mm; }
+  body.print-resume-mode { background: #fff; }
+  body.print-resume-mode > *:not(#print-resume) { display: none !important; }
+  body.print-resume-mode #print-resume { display: block; }
 }
