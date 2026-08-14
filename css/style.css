@@ -1195,25 +1195,35 @@ body.share-mode .main { padding-bottom: 0; }
 
 /* ============ Feedback ============ */
 
-.feedback-fab {
-  position: fixed;
-  left: 18px; bottom: 18px;
-  z-index: 950;
-  width: 42px; height: 42px;
+/* The GitHub link and the bug button share the footer's last row. */
+.sidebar-footer-row { display: flex; align-items: center; gap: 6px; }
+.sidebar-footer-row .ghost-btn { flex: 1; }
+
+.feedback-btn {
+  width: 30px; height: 30px;
+  flex-shrink: 0;
   display: grid; place-items: center;
-  border-radius: 50%;
-  background: var(--bg-elevated);
-  border: 1px solid var(--border-strong);
+  border-radius: 9px;
+  border: 1px solid var(--border);
   color: var(--text-tertiary);
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
-  transition: color 0.15s, border-color 0.15s, transform 0.15s;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
 }
-.feedback-fab:hover { color: var(--accent); border-color: rgba(255, 126, 92, 0.5); transform: translateY(-1px); }
-.feedback-fab svg { width: 19px; height: 19px; }
-/* Keep the sidebar's footer buttons clear of the pinned button. */
-.sidebar-footer { padding-bottom: 52px; }
+.feedback-btn:hover { color: var(--accent); border-color: rgba(255, 126, 92, 0.45); background: var(--accent-soft); }
+.feedback-btn svg { width: 15px; height: 15px; }
+
+/* Floating copy for phones, where the sidebar is hidden. */
+.feedback-btn-floating {
+  display: none;
+  position: fixed;
+  left: 14px;
+  z-index: 950;
+  width: 34px; height: 34px;
+  background: var(--bg-elevated);
+  border-color: var(--border-strong);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
+}
 /* The shared resume is someone's clean public page — no feedback button there. */
-body.share-mode .feedback-fab { display: none; }
+body.share-mode .feedback-btn-floating { display: none; }
 
 .fb-type-row { display: flex; gap: 6px; }
 .fb-type {
@@ -1278,10 +1288,10 @@ body.share-mode .feedback-fab { display: none; }
   .tab-item svg { width: 21px; height: 21px; }
   .tab-item.active { color: var(--accent); }
 
-  /* Lift the feedback button above the tab bar; on the map view the
-     stat strip owns that corner, so the button steps aside. */
-  .feedback-fab { left: 14px; bottom: calc(78px + env(safe-area-inset-bottom, 0px)); }
-  body:has(#view-map.active) .feedback-fab { display: none; }
+  /* Show the floating feedback button above the tab bar; on the map view
+     the stat strip owns that corner, so the button steps aside. */
+  .feedback-btn-floating { display: grid; bottom: calc(78px + env(safe-area-inset-bottom, 0px)); }
+  body:has(#view-map.active) .feedback-btn-floating { display: none; }
 
   .map-stats { left: 12px; right: 12px; bottom: 86px; justify-content: space-around; }
   .map-overlay { top: 12px; left: 12px; }
