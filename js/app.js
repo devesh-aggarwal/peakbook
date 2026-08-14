@@ -323,6 +323,42 @@ function allAscents() {
   return out;
 }
 
+// Newest ascent date per mountain, for recency ordering.
+function latestAscentDates() {
+  const latest = {};
+  for (const a of allAscents()) if (!(a.mountain.id in latest)) latest[a.mountain.id] = a.date;
+  return latest;
+}
+
+// The résumé views list a repeated peak once per ascent, which reads like
+// padding when the entries say nothing new. Fold a peak's ascents into one
+// entry — sitting where the newest ascent falls, carrying every date and an
+// ×N count — whenever their notes all say the same thing (or nothing).
+// Ascents with differing notes each have something of their own to say, so
+// they stay separate. Expects (and preserves) date-desc order; every entry
+// comes back with a `dates` array, folded or not.
+function foldRepeatAscents(ascents) {
+  const byMountain = new Map();
+  for (const a of ascents) {
+    if (!byMountain.has(a.mountain.id)) byMountain.set(a.mountain.id, []);
+    byMountain.get(a.mountain.id).push(a);
+  }
+  const folded = new Set(); // mountains already emitted as a folded entry
+  const out = [];
+  for (const a of ascents) {
+    if (folded.has(a.mountain.id)) continue;
+    const group = byMountain.get(a.mountain.id);
+    const oneVoice = group.every((x) => (x.note || "").trim() === (group[0].note || "").trim());
+    if (group.length > 1 && oneVoice) {
+      folded.add(a.mountain.id);
+      out.push({ ...a, dates: group.map((x) => x.date) }); // a is the newest: date-desc input
+    } else {
+      out.push({ ...a, dates: [a.date] });
+    }
+  }
+  return out;
+}
+
 function listProgress(list) {
   const done = list.peaks.filter(isClimbed).length;
   return { done, total: list.peaks.length, pct: done / list.peaks.length };
@@ -585,9 +621,12 @@ function ringCard(list, p, interactive = true) {
 // `interactive` makes each row open the peak's detail modal (dashboard only;
 // the resume is read-only). `highlights` ({ [mountainId]: [bullet] }) renders
 // a mountain's résumé bullets under its most recent ascent (resume only).
-function ascentsByYearHTML(ascents, interactive = false, highlights = null) {
+// `fold` collapses same-note repeat ascents (see foldRepeatAscents) — the
+// resume does this; the dashboard logbook keeps one row per ascent.
+function ascentsByYearHTML(ascents, interactive = false, highlights = null, fold = false) {
+  const entries = fold ? foldRepeatAscents(ascents) : ascents.map((a) => ({ ...a, dates: [a.date] }));
   const byYear = new Map(); // insertion order = date-desc, since allAscents() sorts
-  for (const a of ascents) {
+  for (const a of entries) {
     const y = a.date.slice(0, 4);
     if (!byYear.has(y)) byYear.set(y, []);
     byYear.get(y).push(a);
@@ -608,13 +647,13 @@ function ascentsByYearHTML(ascents, interactive = false, highlights = null) {
           <div class="resume-ascent${interactive ? " clickable" : ""}"${interactive ? ` onclick="openPeak('${a.mountain.id}')"` : ""}>
             <div class="timeline-flag">${a.mountain.flag}</div>
             <div class="timeline-body">
-              <div class="timeline-name">${esc(a.mountain.name)}</div>
+              <div class="timeline-name">${esc(a.mountain.name)}${a.dates.length > 1 ? ` <span class="ascent-times">×${a.dates.length}</span>` : ""}</div>
               <div class="timeline-meta">${esc(a.mountain.range)} · ${esc(a.mountain.country)}${a.note ? ` — <em>${esc(a.note)}</em>` : ""}</div>
               ${bulletsFor(a.mountain)}
             </div>
             <div class="resume-ascent-right">
               <div class="timeline-elev">${peakElev(a.mountain)}</div>
-              <div class="resume-ascent-date">${formatDate(a.date)}</div>
+              <div class="resume-ascent-date">${a.dates.map(formatDate).join("<br>")}</div>
             </div>
           </div>`).join("")}
       </div>
@@ -1478,16 +1517,17 @@ function openResumeBuilder() {
   state.openPeakId = null;
   state.fromListId = null;
   const r = state.resume;
-  const peaks = climbedPeaks().sort((a, b) => b.elevation - a.elevation);
-  const defaultName = r.name || (state.demo ? "" : window.peakbookAccountName || "");
+  // Most recently climbed first, matching the order the résumé prints in —
+  // an elevation sort here made the highlight rows feel shuffled against it.
+  const latest = latestAscentDates();
+  const peaks = climbedPeaks().sort((a, b) => (latest[b.id] || "").localeCompare(latest[a.id] || ""));
+  const defaultName = r.name || window.peakbookAccountName || "";
 
   openModal(`
     <div class="modal-hero">
       <button class="modal-close" onclick="closeModal()">✕</button>
       <div class="modal-title">Climbing résumé</div>
-      <div class="modal-sub">${state.demo
-        ? "A sample résumé you can edit and export — nothing here is saved"
-        : "Skills, courses, and expedition highlights, exported as a clean PDF"}</div>
+      <div class="modal-sub">Skills, courses, and expedition highlights, exported as a clean PDF</div>
     </div>
     <div class="modal-body">
       <form class="log-form resume-form" onsubmit="saveResumeBuilder(event, false)">
@@ -1521,8 +1561,8 @@ function openResumeBuilder() {
         </div>` : ""}
 
         <div class="resume-actions">
-          <button type="submit" class="secondary-btn">${state.demo ? "Apply" : "Save"}</button>
-          <button type="button" class="primary-btn" onclick="saveResumeBuilder(event, true)">${state.demo ? "Export PDF" : "Save &amp; export PDF"}</button>
+          <button type="submit" class="secondary-btn">Save</button>
+          <button type="button" class="primary-btn" onclick="saveResumeBuilder(event, true)">Save &amp; export PDF</button>
         </div>
       </form>
     </div>`);
@@ -1565,7 +1605,7 @@ function saveResumeBuilder(e, exportAfter) {
   saveResume();
   closeModal();
   if (exportAfter) exportResumePDF();
-  else toast(state.demo ? "Sample résumé updated — nothing is saved" : "Résumé saved");
+  else toast("Résumé saved");
 }
 
 async function exportResumePDF() {
@@ -1575,17 +1615,17 @@ async function exportResumePDF() {
     // being open right now is itself the verification link.
     name = state.sharedName || "A climber";
     url = location.href;
-  } else if (state.demo) {
-    // The sample logbook isn't anybody's record: print it without a
-    // verification link, and never fall back to the signed-in account's name.
-    name = state.resume.name || "A climber";
   } else {
     name = state.resume.name || window.peakbookAccountName || "A climber";
-    try {
-      const s = window.peakbookShare ? await window.peakbookShare.getState() : null;
-      if (s && s.signedIn && s.shared) url = window.peakbookShare.url();
-    } catch {
-      /* no verification link — the PDF still works */
+    // The footer link asserts the climbs are on record at that URL, which is
+    // never true of the sample logbook — a demo export goes out unlinked.
+    if (!state.demo) {
+      try {
+        const s = window.peakbookShare ? await window.peakbookShare.getState() : null;
+        if (s && s.signedIn && s.shared) url = window.peakbookShare.url();
+      } catch {
+        /* no verification link — the PDF still works */
+      }
     }
   }
   buildPrintResume(name, url);
@@ -1620,8 +1660,10 @@ function buildPrintResume(name, url) {
       ].join("&ensp;·&ensp;")
     : "No ascents logged yet";
 
+  // Same-note repeat ascents print as one ×N entry under the newest date's
+  // year — the ascent count in the header above still counts each one.
   const byYear = new Map(); // insertion order = date-desc, since allAscents() sorts
-  for (const a of ascents) {
+  for (const a of foldRepeatAscents(ascents)) {
     const y = a.date.slice(0, 4);
     if (!byYear.has(y)) byYear.set(y, []);
     byYear.get(y).push(a);
@@ -1639,9 +1681,9 @@ function buildPrintResume(name, url) {
     return `
       <div class="pr-entry">
         <div class="pr-entry-head">
-          <span class="pr-peak">${esc(m.name)}</span>
+          <span class="pr-peak">${esc(m.name)}${a.dates.length > 1 ? ` <span class="pr-times">×${a.dates.length}</span>` : ""}</span>
           <span class="pr-peak-meta">${metaLine(peakElev(m), m.range, m.country)}</span>
-          <span class="pr-date">${formatDate(a.date)}</span>
+          <span class="pr-date">${a.dates.map((d) => `<span class="pr-d">${formatDate(d)}</span>`).join(" · ")}</span>
         </div>
         ${bullets.length ? `<ul class="pr-bullets">${bullets.join("")}</ul>` : ""}
       </div>`;
@@ -1715,7 +1757,12 @@ const DEMO_CLIMBS = {
   fuji: [{ date: "2022-08-27", note: "Yoshida trail, sunrise summit" }],
   toubkal: [{ date: "2022-10-08", note: "" }],
   rainier: [{ date: "2023-07-15", note: "Disappointment Cleaver" }],
-  hood: [{ date: "2023-05-21", note: "South side, early start" }],
+  // Two same-note ascents on purpose: they show the resume folding repeat
+  // climbs into one "×2" entry.
+  hood: [
+    { date: "2025-04-19", note: "South side, early start" },
+    { date: "2023-05-21", note: "South side, early start" },
+  ],
   "st-helens": [{ date: "2023-06-10", note: "Monitor Ridge" }],
   orizaba: [{ date: "2023-12-16", note: "Jamapa Glacier" }],
   cotopaxi: [{ date: "2024-01-20", note: "" }],
@@ -2098,7 +2145,7 @@ function renderResume(profile) {
 
     <div class="dash-section">
       <div class="dash-section-title">All ascents</div>
-      ${ascentsByYearHTML(ascents, false, state.resume.highlights)}
+      ${ascentsByYearHTML(ascents, false, state.resume.highlights, true)}
     </div>
 
     <footer class="resume-footer">
