@@ -6,6 +6,7 @@ A simple website for tracking the mountains you've climbed, inspired by flight-t
 
 - **Explore & search:** browse 363 notable peaks worldwide; search by name, range, or country and filter by continent or climbed status.
 - **Log climbs:** record ascents with a date and an optional note (route, partners, conditions). Multiple ascents per peak are supported.
+- **Add your own peaks:** anything missing from the dataset can be added by hand — name, elevation, country, and coordinates — and it then behaves like any other peak (search, map, stats, export). Custom peaks are private to that logbook: they sync to the owner's own account and travel with their shared profile, but never join the global list.
 - **World map:** a dark world map with glowing markers for every summit you've logged (Leaflet + CARTO dark tiles).
 - **Statistics:** peaks climbed, highest summit, combined elevation, countries, continents, climbs per year, and altitude-band breakdown.
 - **Peak lists:** track your progress on the Seven Summits, the 8,000ers, the Volcanic Seven Summits, Alpine Classics, Cascade Volcanoes, the Colorado 14ers, Andes & Patagonia, and the Country High Points, with progress rings and completion states.
@@ -35,4 +36,5 @@ Then open http://localhost:8420.
 ## Notes
 
 - Data model: `{ [mountainId]: [{ date, note }] }` under the `peakbook.climbs` localStorage key, kept deliberately simple so it can move to a backend or native app later.
+- User-added peaks live under `peakbook.custom` as `{ [peakId]: peak }`, keyed by a `custom-`-prefixed id that can never collide with a dataset id. Everything arriving from storage, an import file, or the cloud goes through `sanitizeCustomPeaks()` first — a published resume renders its owner's peaks on a stranger's screen, so flags are whitelisted against the dataset and every text field is escaped at render.
 - The only external dependencies are Leaflet (CDN) and CARTO map tiles; everything else is vanilla HTML/CSS/JS.

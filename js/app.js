@@ -7,6 +7,7 @@
 const STORAGE_KEY = "peakbook.climbs";
 const LEGACY_STORAGE_KEY = "summit.climbs"; // the app's former name
 const UNITS_KEY = "peakbook.units";         // "m" | "ft"
+const CUSTOM_KEY = "peakbook.custom";       // peaks this person added themselves
 
 // When the URL is a shared-profile link (?u=<uid>), the app boots into a
 // read-only "climbing resume" view of that person's public profile instead
@@ -15,6 +16,8 @@ const SHARE_UID = new URLSearchParams(location.search).get("u");
 
 const state = {
   climbs: loadClimbs(),
+  custom: {}, // { [id]: peak } — private to this logbook, never global. Filled in below,
+              // once the sanitizer it depends on has been declared.
   demo: false, // browsing the sample logbook: nothing persists or syncs
   view: "dashboard",
   search: "",
@@ -26,7 +29,33 @@ const state = {
   editingAscentIdx: null, // stored-array index of the ascent being edited in the peak modal
 };
 
+// Keyed lookup over *every* peak the app knows about — the built-in dataset
+// plus this person's own additions. The object identity never changes, so
+// everything holding a reference to it keeps working after a custom peak is
+// added or removed.
 const byId = Object.fromEntries(MOUNTAINS.map((m) => [m.id, m]));
+
+// Custom peak ids are prefixed so they can never collide with a dataset id,
+// present or future. Nothing in MOUNTAINS starts with this.
+const CUSTOM_PREFIX = "custom-";
+
+function isCustomId(id) {
+  return typeof id === "string" && id.startsWith(CUSTOM_PREFIX);
+}
+
+// The dataset and this person's own peaks, in one list.
+function allPeaks() {
+  return MOUNTAINS.concat(Object.values(state.custom));
+}
+
+// Mirrors state.custom into byId. Called after anything changes state.custom
+// and before any code that resolves ids (sanitizeClimbs in particular).
+function refreshCustomIndex() {
+  for (const id of Object.keys(byId)) {
+    if (isCustomId(id)) delete byId[id];
+  }
+  for (const [id, peak] of Object.entries(state.custom)) byId[id] = peak;
+}
 
 /* ---------- persistence ---------- */
 
@@ -49,8 +78,34 @@ function loadClimbs() {
   }
 }
 
+// Peaks this person added themselves. Like the logbook, they live on the
+// device and (when signed in) in their own cloud document — never in the
+// shared dataset, and never in anyone else's copy of the app.
+function loadCustom() {
+  if (SHARE_UID) return {}; // resume view shows the profile owner's peaks, not ours
+  try {
+    return sanitizeCustomPeaks(JSON.parse(localStorage.getItem(CUSTOM_KEY) || "{}"));
+  } catch {
+    return {};
+  }
+}
+
 function writeLocal() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state.climbs));
+}
+
+function writeCustom() {
+  try {
+    localStorage.setItem(CUSTOM_KEY, JSON.stringify(state.custom));
+  } catch {
+    /* private mode — the peak still works for this session */
+  }
+}
+
+function pushCloud() {
+  if (window.peakbookSync && typeof window.peakbookSync.push === "function") {
+    window.peakbookSync.push(state.climbs, state.custom);
+  }
 }
 
 // Elevations are stored in metres; this is purely a display preference.
@@ -67,13 +122,90 @@ function loadUnits() {
 function saveClimbs() {
   if (state.demo) return; // demo data is a throwaway preview
   writeLocal();
-  if (window.peakbookSync && typeof window.peakbookSync.push === "function") {
-    window.peakbookSync.push(state.climbs);
-  }
+  pushCloud();
 }
 
-// Keep only entries that look like real ascents of known mountains.
-// Guards both imported files and shared-profile data fetched from the cloud.
+// Custom peaks are the person's own reference data rather than demo-able
+// content, so they persist even while the sample logbook is on screen. The
+// cloud push is still skipped in demo mode so the sample climbs stay put.
+function saveCustom() {
+  refreshCustomIndex();
+  writeCustom();
+  if (!state.demo) pushCloud();
+}
+
+/* ---------- custom peaks ----------
+   A custom peak is user-typed data that can end up rendered on a *stranger's*
+   screen (a published resume carries its owner's peaks with it), so everything
+   arriving from storage, an import file, or the cloud goes through here first.
+   Names, countries and ranges are escaped at every render site; flags are not,
+   so a flag is only ever accepted if the dataset already uses it. */
+
+const NEUTRAL_FLAG = "🏔";
+const KNOWN_FLAGS = new Set(MOUNTAINS.map((m) => m.flag).concat(NEUTRAL_FLAG));
+
+// Country/flag pairs the dataset already carries, for the add-peak picker.
+// A flag belongs to the first country named ("Nepal / China" is 🇳🇵), so only
+// that one is paired off; anything missing is covered by the "Other" option.
+const COUNTRY_OPTIONS = (() => {
+  const seen = new Map();
+  for (const m of MOUNTAINS) {
+    const country = m.country.split(" / ")[0].trim();
+    if (country && !seen.has(country)) seen.set(country, m.flag);
+  }
+  return [...seen.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([country, flag]) => ({ country, flag }));
+})();
+
+function cleanStr(v, max) {
+  return typeof v === "string" ? v.trim().slice(0, max) : "";
+}
+
+function cleanNum(v, min, max) {
+  const n = typeof v === "number" ? v : parseFloat(v);
+  return Number.isFinite(n) && n >= min && n <= max ? n : null;
+}
+
+function sanitizeCustomPeaks(raw) {
+  const clean = {};
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return clean;
+  for (const [id, p] of Object.entries(raw)) {
+    if (!/^custom-[a-z0-9]{4,24}$/.test(id) || !p || typeof p !== "object") continue;
+    const name = cleanStr(p.name, 60);
+    const elevation = cleanNum(p.elevation, -500, 9000);
+    const lat = cleanNum(p.lat, -90, 90);
+    const lng = cleanNum(p.lng, -180, 180);
+    // A bad continent would break the filter chips and push the "x/7
+    // continents" stat past 7, so it disqualifies the peak rather than
+    // silently defaulting to a real one.
+    if (!name || elevation === null || lat === null || lng === null) continue;
+    if (!CONTINENTS.includes(p.continent)) continue;
+    const ft = cleanNum(p.ft, -1700, 29600);
+    clean[id] = {
+      id,
+      name,
+      elevation,
+      ...(ft === null ? {} : { ft }),
+      country: cleanStr(p.country, 60) || "Unknown",
+      flag: KNOWN_FLAGS.has(p.flag) ? p.flag : NEUTRAL_FLAG,
+      continent: p.continent,
+      range: cleanStr(p.range, 60),
+      lat,
+      lng,
+      custom: true,
+    };
+  }
+  return clean;
+}
+
+// Restore this device's custom peaks now the sanitizer above exists, and get
+// them into byId before anything tries to resolve a climb against them.
+state.custom = loadCustom();
+refreshCustomIndex();
+
+// Keep only entries that look like real ascents of peaks we know about —
+// the dataset plus any custom peaks currently registered in byId. Guards
+// imported files and shared-profile data fetched from the cloud, so custom
+// peaks must always be installed *before* the climbs that reference them.
 function sanitizeClimbs(climbs) {
   const clean = {};
   if (!climbs || typeof climbs !== "object" || Array.isArray(climbs)) return clean;
@@ -94,7 +226,7 @@ function isClimbed(id) {
 }
 
 function climbedPeaks() {
-  return MOUNTAINS.filter((m) => isClimbed(m.id));
+  return allPeaks().filter((m) => isClimbed(m.id));
 }
 
 function allAscents() {
@@ -211,6 +343,16 @@ function fold(s) {
 
 function peakHaystack(m) {
   return fold(`${m.name} ${m.aka || ""} ${m.country} ${m.range} ${m.continent}`);
+}
+
+// Joins the parts of a peak's subtitle with separators, dropping any that are
+// blank — a custom peak often has no range, and " · Norway" reads as a bug.
+// Every part is escaped, so this is the safe way to render user-typed fields.
+function metaLine(...parts) {
+  return parts
+    .filter((p) => p != null && String(p).trim() !== "")
+    .map(esc)
+    .join(" · ");
 }
 
 /* ============================================================
@@ -458,7 +600,7 @@ function altitudeBands(peaks) {
 /* ---------- Explore ---------- */
 
 function renderExplore() {
-  document.getElementById("explore-count").textContent = MOUNTAINS.length;
+  document.getElementById("explore-count").textContent = allPeaks().length;
   renderFilterChips();
   renderPeakGrid();
 }
@@ -495,7 +637,7 @@ function renderFilterChips() {
 
 function filteredPeaks() {
   const q = fold(state.search.trim());
-  return MOUNTAINS.filter((m) => {
+  return allPeaks().filter((m) => {
     if (state.status === "climbed" && !isClimbed(m.id)) return false;
     if (state.status === "unclimbed" && isClimbed(m.id)) return false;
     if (state.filter !== "all" && m.continent !== state.filter) return false;
@@ -560,7 +702,7 @@ function renderPeakGrid() {
           ${climbed ? `<span class="climbed-badge">✓ Climbed${n > 1 ? ` ×${n}` : ""}</span>` : ""}
         </div>
         <div class="peak-name">${esc(m.name)}</div>
-        <div class="peak-meta">${esc(m.range)} · ${esc(m.country)}</div>
+        <div class="peak-meta">${metaLine(m.range, m.country)}</div>
         <div class="peak-card-bottom">
           <div class="peak-elev">${peakElevHTML(m, " ")}</div>
           ${peakListDots(m)}
@@ -604,7 +746,7 @@ function renderMapMarkers() {
   state.markers.forEach((mk) => mk.remove());
   state.markers = [];
 
-  for (const m of MOUNTAINS) {
+  for (const m of allPeaks()) {
     const climbed = isClimbed(m.id);
     if (!climbed && !showAll) continue;
     const icon = L.divIcon({
@@ -714,7 +856,7 @@ function openPeak(id, fromListId) {
       ${fromList ? `<button class="modal-back" onclick="openList('${fromList.id}')">← ${esc(fromList.name)}</button>` : ""}
       <div class="modal-flag">${m.flag}</div>
       <div class="modal-title">${esc(m.name)}</div>
-      <div class="modal-sub">${esc(m.range)} · ${esc(m.country)} · ${esc(m.continent)}</div>
+      <div class="modal-sub">${metaLine(m.range, m.country, m.continent)}</div>
       <div class="modal-facts">
         <div class="fact"><div class="fact-value">${peakElev(m)}</div><div class="fact-label">Elevation · ${peakElevAlt(m)}</div></div>
         ${m.firstAscent ? `<div class="fact"><div class="fact-value">${m.firstAscent}</div><div class="fact-label">First ascent</div></div>` : ""}
@@ -726,6 +868,18 @@ function openPeak(id, fromListId) {
         <div class="modal-section-title">On these lists</div>
         <div class="modal-list-badges">
           ${lists.map((l) => `<span class="list-badge" style="background:${l.color}1c; color:${l.color}">${listGlyph(l)} ${esc(l.name)}</span>`).join("")}
+        </div>` : ""}
+
+      ${m.custom && !SHARE_UID ? `
+        <div class="custom-peak-panel">
+          <div class="custom-peak-copy">
+            <strong>Your own peak</strong>
+            <span>Only you can see this. It isn't part of the global mountain list.</span>
+          </div>
+          <div class="custom-peak-actions">
+            <button class="secondary-btn" onclick="openAddPeak('${m.id}')">Edit details</button>
+            <button class="ascent-delete" onclick="deleteCustomPeak('${m.id}')">Remove peak</button>
+          </div>
         </div>` : ""}
 
       ${ascents.length ? `
@@ -885,6 +1039,10 @@ function openPicker() {
         <input type="search" id="picker-input" placeholder="Search mountains…" autocomplete="off" />
       </div>
       <div class="picker-results" id="picker-results"></div>
+      <button type="button" class="picker-add" onclick="openAddPeak()">
+        <span class="picker-add-icon">+</span>
+        <span>Not listed? <strong>Add your own peak</strong></span>
+      </button>
     </div>
   `);
   const input = document.getElementById("picker-input");
@@ -893,7 +1051,7 @@ function openPicker() {
   let topMatch = null;
   function renderResults() {
     const q = fold(input.value.trim());
-    const matches = MOUNTAINS.filter((m) => !q || peakHaystack(m).includes(q))
+    const matches = allPeaks().filter((m) => !q || peakHaystack(m).includes(q))
       .sort((a, b) => b.elevation - a.elevation)
       .slice(0, 12);
     topMatch = matches[0] || null;
@@ -917,6 +1075,187 @@ function openPicker() {
 }
 
 document.getElementById("btn-log-climb").addEventListener("click", openPicker);
+
+/* ---------- Your own peaks ----------
+   Peaks someone adds themselves. They behave exactly like dataset peaks
+   everywhere in the app, but live only in that person's logbook: on this
+   device, and in their own cloud document when signed in. Nothing here is
+   ever written to a shared collection. */
+
+function newCustomId() {
+  let id;
+  do {
+    id = CUSTOM_PREFIX + (Math.random().toString(36).slice(2, 10) + "0000").slice(0, 8);
+  } while (byId[id]);
+  return id;
+}
+
+function openAddPeak(editId) {
+  const editing = editId ? state.custom[editId] : null;
+  if (editId && !editing) return;
+  state.openPeakId = null;
+  state.fromListId = null;
+
+  const inFeet = state.units === "ft";
+  const elevMin = inFeet ? -1640 : -500;
+  const elevMax = inFeet ? 29500 : 9000;
+  const knownCountry = editing && COUNTRY_OPTIONS.some((c) => c.country === editing.country);
+  const val = (v) => (v == null ? "" : esc(String(v)));
+
+  openModal(`
+    <div class="modal-hero">
+      <button class="modal-close" onclick="closeModal()">✕</button>
+      <div class="modal-flag">${NEUTRAL_FLAG}</div>
+      <div class="modal-title">${editing ? "Edit your peak" : "Add your own peak"}</div>
+      <div class="modal-sub">Yours alone — it stays in your logbook and never joins the global list</div>
+    </div>
+    <div class="modal-body">
+      <form class="log-form" onsubmit="submitCustomPeak(event, ${editing ? `'${editId}'` : "null"})">
+        <div>
+          <label for="cp-name">Name</label>
+          <input type="text" id="cp-name" required maxlength="60" autocomplete="off"
+                 placeholder="Ben Macdui" value="${editing ? val(editing.name) : ""}" />
+        </div>
+
+        <div class="form-row">
+          <div>
+            <label for="cp-elev">Elevation (${unitLabel()})</label>
+            <input type="number" id="cp-elev" required step="1" min="${elevMin}" max="${elevMax}"
+                   placeholder="${inFeet ? "4,295" : "1,309"}" value="${editing ? peakUnit(editing) : ""}" />
+          </div>
+          <div>
+            <label for="cp-continent">Continent</label>
+            <select id="cp-continent" required>
+              ${CONTINENTS.map((c) => `<option value="${esc(c)}" ${editing && editing.continent === c ? "selected" : ""}>${esc(c)}</option>`).join("")}
+            </select>
+          </div>
+        </div>
+
+        <div>
+          <label for="cp-country">Country</label>
+          <select id="cp-country">
+            ${COUNTRY_OPTIONS.map((c) => `<option value="${esc(c.country)}" ${knownCountry && editing.country === c.country ? "selected" : ""}>${c.flag} ${esc(c.country)}</option>`).join("")}
+            <option value="__other" ${editing && !knownCountry ? "selected" : ""}>${NEUTRAL_FLAG} Other…</option>
+          </select>
+        </div>
+
+        <div id="cp-country-other-wrap" ${editing && !knownCountry ? "" : "hidden"}>
+          <label for="cp-country-other">Country name</label>
+          <input type="text" id="cp-country-other" maxlength="60" placeholder="Country"
+                 value="${editing && !knownCountry ? val(editing.country) : ""}" />
+        </div>
+
+        <div>
+          <label for="cp-range">Range <span style="font-weight:400">(optional)</span></label>
+          <input type="text" id="cp-range" maxlength="60" placeholder="Cairngorms" value="${editing ? val(editing.range) : ""}" />
+        </div>
+
+        <div class="form-row">
+          <div>
+            <label for="cp-lat">Latitude</label>
+            <input type="number" id="cp-lat" required step="any" min="-90" max="90"
+                   placeholder="57.0704" value="${editing ? val(editing.lat) : ""}" />
+          </div>
+          <div>
+            <label for="cp-lng">Longitude</label>
+            <input type="number" id="cp-lng" required step="any" min="-180" max="180"
+                   placeholder="-3.6690" value="${editing ? val(editing.lng) : ""}" />
+          </div>
+        </div>
+        <p class="form-hint">Coordinates place the summit on your map. In Google Maps, right-click the
+        peak and click the numbers at the top of the menu to copy them.</p>
+
+        <button type="submit" class="primary-btn">${editing ? "Save changes" : "Add peak"}</button>
+        ${editing ? `<button type="button" class="secondary-btn" onclick="openPeak('${editId}')">Cancel</button>` : ""}
+      </form>
+    </div>
+  `);
+
+  const countrySel = document.getElementById("cp-country");
+  const otherWrap = document.getElementById("cp-country-other-wrap");
+  countrySel.addEventListener("change", () => {
+    otherWrap.hidden = countrySel.value !== "__other";
+    if (!otherWrap.hidden) document.getElementById("cp-country-other").focus();
+  });
+  document.getElementById("cp-name").focus();
+}
+
+function submitCustomPeak(e, editId) {
+  e.preventDefault();
+  const name = document.getElementById("cp-name").value.trim();
+  const elevRaw = parseFloat(document.getElementById("cp-elev").value);
+  const continent = document.getElementById("cp-continent").value;
+  const countryPick = document.getElementById("cp-country").value;
+  const countryOther = document.getElementById("cp-country-other").value.trim();
+  const range = document.getElementById("cp-range").value.trim();
+  const lat = parseFloat(document.getElementById("cp-lat").value);
+  const lng = parseFloat(document.getElementById("cp-lng").value);
+
+  // The flag is never free text: it either comes from the dataset pair the
+  // person picked, or it's the neutral fallback.
+  const picked = COUNTRY_OPTIONS.find((c) => c.country === countryPick);
+  const country = picked ? picked.country : countryOther;
+  const flag = picked ? picked.flag : NEUTRAL_FLAG;
+
+  if (!name || !Number.isFinite(elevRaw) || !Number.isFinite(lat) || !Number.isFinite(lng)) {
+    toast("⚠️ Name, elevation and coordinates are all needed");
+    return;
+  }
+  if (!country) {
+    toast("⚠️ Add a country name");
+    return;
+  }
+
+  const inFeet = state.units === "ft";
+  const draft = {
+    id: editId || newCustomId(),
+    name,
+    // Elevations are stored in metres; when someone types feet we keep their
+    // exact figure too, so it displays back as entered rather than round-tripped.
+    elevation: inFeet ? Math.round(elevRaw / M_TO_FT) : Math.round(elevRaw),
+    ...(inFeet ? { ft: Math.round(elevRaw) } : {}),
+    country,
+    flag,
+    continent,
+    range,
+    lat,
+    lng,
+    custom: true,
+  };
+
+  // Same gate the cloud and import paths use, so there is exactly one
+  // definition of a valid custom peak.
+  const clean = sanitizeCustomPeaks({ [draft.id]: draft })[draft.id];
+  if (!clean) {
+    toast("⚠️ Check the elevation and coordinates — something's out of range");
+    return;
+  }
+
+  state.custom[clean.id] = clean;
+  saveCustom();
+  closeModal();
+  render();
+  toast(editId ? "Peak updated" : `${clean.name} added to your peaks`);
+  openPeak(clean.id);
+}
+
+function deleteCustomPeak(id) {
+  const peak = state.custom[id];
+  if (!peak) return;
+  const n = (state.climbs[id] || []).length;
+  const alsoClimbs = n ? ` Your ${n} logged ascent${n === 1 ? "" : "s"} of it will go too.` : "";
+  if (!confirm(`Remove "${peak.name}" from your peaks?${alsoClimbs}`)) return;
+
+  delete state.custom[id];
+  saveCustom();
+  if (state.climbs[id]) {
+    delete state.climbs[id];
+    saveClimbs();
+  }
+  closeModal();
+  render();
+  toast("Peak removed");
+}
 
 /* ---------- Share profile (climbing resume) ---------- */
 
@@ -1119,7 +1458,11 @@ document.getElementById("btn-export").addEventListener("click", () => {
     toast("You're viewing demo data — exit the demo to export your own logbook");
     return;
   }
-  const blob = new Blob([JSON.stringify({ app: "peakbook", version: 1, climbs: state.climbs }, null, 2)], { type: "application/json" });
+  // version 2 adds `custom`; version 1 files (climbs only) still import fine.
+  const blob = new Blob(
+    [JSON.stringify({ app: "peakbook", version: 2, climbs: state.climbs, custom: state.custom }, null, 2)],
+    { type: "application/json" }
+  );
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
@@ -1138,20 +1481,39 @@ document.getElementById("import-file").addEventListener("change", (e) => {
   if (!file) return;
   const reader = new FileReader();
   reader.onload = () => {
+    const prevCustom = state.custom;
     try {
       const data = JSON.parse(reader.result);
+
+      // The file's own peaks have to be resolvable before its climbs are
+      // checked, or every ascent of a custom peak would be dropped as an
+      // unknown id. Staged onto state so it can be rolled back below.
+      const incoming = sanitizeCustomPeaks(data.custom);
+      state.custom = { ...prevCustom, ...incoming };
+      refreshCustomIndex();
+
       const clean = sanitizeClimbs(data.climbs || data);
       if (!Object.keys(clean).length) throw new Error("no valid climbs");
       // Confirm against the real logbook — demo climbs aren't the visitor's.
       const existing = state.demo ? Object.keys(loadClimbs()).length : Object.keys(state.climbs).length;
-      if (existing && !confirm(`Replace your current logbook (${existing} peak${existing === 1 ? "" : "s"}) with this file (${Object.keys(clean).length} peaks)?`)) return;
+      if (existing && !confirm(`Replace your current logbook (${existing} peak${existing === 1 ? "" : "s"}) with this file (${Object.keys(clean).length} peaks)?`)) {
+        throw new Error("cancelled");
+      }
       state.demo = false; // an imported file is a real logbook
       state.climbs = clean;
       saveClimbs();
+      saveCustom();
       render();
-      toast(`Logbook imported — ${Object.keys(clean).length} peak${Object.keys(clean).length === 1 ? "" : "s"}`);
-    } catch {
-      toast("⚠️ Couldn't read that file");
+      const added = Object.keys(incoming).length;
+      toast(
+        `Logbook imported — ${Object.keys(clean).length} peak${Object.keys(clean).length === 1 ? "" : "s"}` +
+        (added ? `, ${added} of them your own` : "")
+      );
+    } catch (err) {
+      // Nothing was committed: put the staged custom peaks back.
+      state.custom = prevCustom;
+      refreshCustomIndex();
+      if (!err || err.message !== "cancelled") toast("⚠️ Couldn't read that file");
     }
   };
   reader.readAsText(file);
@@ -1170,10 +1532,22 @@ window.peakbookApp = {
     // hand back the real (stored) logbook so demo data never reaches the cloud.
     return state.demo ? loadClimbs() : state.climbs;
   },
+  // Peaks this person added themselves (merged into the cloud copy on first
+  // sign-in, alongside the logbook).
+  getCustom() {
+    return state.custom;
+  },
   // Replace the logbook with data arriving from the cloud, then re-render.
   // Does not call saveClimbs(), so it never echoes back to the cloud.
-  applyRemote(climbs) {
+  applyRemote(climbs, custom) {
     state.demo = false; // the signed-in logbook always wins over a demo preview
+    // `undefined` means the account predates custom peaks — keep what's on this
+    // device. An empty object is a real state (all of them deleted elsewhere).
+    if (custom !== undefined) {
+      state.custom = sanitizeCustomPeaks(custom);
+      refreshCustomIndex();
+      writeCustom();
+    }
     state.climbs = climbs && typeof climbs === "object" ? climbs : {};
     writeLocal();
     render();
@@ -1183,6 +1557,12 @@ window.peakbookApp = {
   // Shared-profile (resume) mode: auth.js fetched profiles/<uid> for us.
   showSharedProfile(profile) {
     if (!SHARE_UID) return;
+    // A published resume carries its owner's own peaks with it, since this
+    // visitor's copy of the app has never heard of them. They're installed
+    // before the climbs so those ascents survive sanitizeClimbs, and only in
+    // memory — a resume never writes to the visitor's storage.
+    state.custom = sanitizeCustomPeaks(profile && profile.customPeaks);
+    refreshCustomIndex();
     state.climbs = sanitizeClimbs(profile && profile.climbs);
     renderResume(profile || {});
   },
@@ -1346,7 +1726,7 @@ function initResumeMap(peaks) {
       .addTo(map)
       .bindPopup(`
         <div class="popup-name">${m.flag} ${esc(m.name)}</div>
-        <div class="popup-meta">${peakElev(m)} · ${esc(m.range)}</div>`);
+        <div class="popup-meta">${metaLine(peakElev(m), m.range)}</div>`);
   }
   // Fit after a frame: the container was injected via innerHTML this tick,
   // so Leaflet may have measured it before layout settled.
