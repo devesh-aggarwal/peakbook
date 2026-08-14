@@ -1477,7 +1477,7 @@ function openResumeBuilder() {
     <div class="modal-hero">
       <button class="modal-close" onclick="closeModal()">✕</button>
       <div class="modal-title">Climbing résumé</div>
-      <div class="modal-sub">Skills, courses, and expedition highlights — exported as a clean PDF</div>
+      <div class="modal-sub">Skills, courses, and expedition highlights, exported as a clean PDF</div>
     </div>
     <div class="modal-body">
       <form class="log-form resume-form" onsubmit="saveResumeBuilder(event, false)">
@@ -1495,13 +1495,11 @@ function openResumeBuilder() {
           <label>Certifications &amp; courses</label>
           <div id="rb-certs">${r.certs.map((c) => certRowHTML(c)).join("")}</div>
           <button type="button" class="secondary-btn cert-add" id="rb-cert-add">+ Add a course or cert</button>
-          <p class="form-hint">Avalanche courses, wilderness first aid, guide certs — anything that belongs on a climbing résumé.</p>
         </div>
 
         ${peaks.length ? `
         <div>
           <label>Expedition highlights <span style="font-weight:400">(one bullet per line)</span></label>
-          <p class="form-hint" style="margin:0 0 10px">Add bullets under a summit to highlight your contribution to the expedition.</p>
           <div class="hl-list">
             ${peaks.map((m) => `
               <div class="hl-row">
@@ -1510,14 +1508,12 @@ function openResumeBuilder() {
                   placeholder="Led the rope team on summit day…">${esc((r.highlights[m.id] || []).join("\n"))}</textarea>
               </div>`).join("")}
           </div>
-        </div>` : `
-        <p class="form-hint">Log a climb and it'll appear here with room for highlight bullets.</p>`}
+        </div>` : ""}
 
         <div class="resume-actions">
           <button type="submit" class="secondary-btn">Save</button>
           <button type="button" class="primary-btn" onclick="saveResumeBuilder(event, true)">Save &amp; export PDF</button>
         </div>
-        <p class="form-hint" id="rb-verify-hint"></p>
       </form>
     </div>`);
 
@@ -1530,21 +1526,6 @@ function openResumeBuilder() {
     const btn = e.target.closest(".cert-remove");
     if (btn) btn.closest("[data-cert-row]").remove();
   });
-
-  // The PDF can carry a link to the live profile as proof the climbs are on
-  // record — tell the person whether theirs will. No hint on an unconfigured
-  // copy, where publishing isn't possible anyway.
-  if (window.peakbookShare) {
-    window.peakbookShare.getState().then((s) => {
-      const hint = document.getElementById("rb-verify-hint");
-      if (!hint) return;
-      if (s.signedIn && s.shared) {
-        hint.textContent = "Your PDF will carry a link to your live profile, so anyone can verify the climbs.";
-      } else if (s.configured) {
-        hint.textContent = "Tip: publish your profile (Share) first and the PDF will carry a link to it, so anyone can verify the climbs.";
-      }
-    });
-  }
 }
 
 function saveResumeBuilder(e, exportAfter) {

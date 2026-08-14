@@ -1261,7 +1261,13 @@ body.share-mode .feedback-btn-floating { display: none; }
   padding: 6px 0;
 }
 .cert-remove:hover { color: #ff8080; background: rgba(255, 110, 110, 0.08); }
-.modal .log-form button.cert-add { padding: 8px 13px; font-size: 12.5px; }
+.modal .log-form button.cert-add {
+  width: auto;
+  align-self: flex-start;
+  padding: 8px 14px;
+  font-size: 12.5px;
+  margin-top: 2px;
+}
 
 .hl-list { display: flex; flex-direction: column; gap: 12px; }
 .hl-peak {
