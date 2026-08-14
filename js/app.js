@@ -330,37 +330,30 @@ function latestAscentDates() {
   return latest;
 }
 
-// The résumé views list a repeated peak once per ascent, which reads like
-// padding when the entries say nothing new. Fold a peak's ascents into one
-// entry — sitting where the newest ascent falls, carrying every date and an
-// ×N count — whenever their notes all say the same thing (or nothing).
-// Ascents with differing notes each have something of their own to say, so
-// they stay separate. Expects (and preserves) date-desc order; every entry
-// comes back with a `dates` array, folded or not.
+// The résumé tells a repeated peak's story once: its ascents fold into a
+// single entry — sitting where the newest ascent falls — carrying an ×N
+// count and every date. Résumés don't render anything per-ascent (notes
+// surface through the bullet list, see resumeBullets), so repeat entries
+// would just be identical rows. Expects (and preserves) date-desc order;
+// every entry comes back with a `dates` array, folded or not.
 function foldRepeatAscents(ascents) {
-  const byMountain = new Map();
-  for (const a of ascents) {
-    if (!byMountain.has(a.mountain.id)) byMountain.set(a.mountain.id, []);
-    byMountain.get(a.mountain.id).push(a);
-  }
-  const folded = new Set(); // mountains already emitted as a folded entry
+  const seen = new Map(); // mountain id → its (mutable) folded entry
   const out = [];
   for (const a of ascents) {
-    if (folded.has(a.mountain.id)) continue;
-    const group = byMountain.get(a.mountain.id);
-    const oneVoice = group.every((x) => (x.note || "").trim() === (group[0].note || "").trim());
-    if (group.length > 1 && oneVoice) {
-      folded.add(a.mountain.id);
-      out.push({ ...a, dates: group.map((x) => x.date) }); // a is the newest: date-desc input
+    const entry = seen.get(a.mountain.id);
+    if (entry) {
+      entry.dates.push(a.date); // date-desc input, so the entry sits at the newest
     } else {
-      out.push({ ...a, dates: [a.date] });
+      const fresh = { ...a, dates: [a.date] };
+      seen.set(a.mountain.id, fresh);
+      out.push(fresh);
     }
   }
   return out;
 }
 
-// A peak's logbook notes, distinct and newest-first — the starting draft for
-// its résumé bullets when none have been saved yet (see openResumeBuilder).
+// A peak's logbook notes, distinct and newest-first — the default résumé
+// bullets when none have been saved in the builder.
 function noteDraft(id) {
   const seen = new Set();
   const out = [];
@@ -374,14 +367,11 @@ function noteDraft(id) {
   return out;
 }
 
-// Once a peak has saved résumé bullets, they are its story: the logbook note
-// was their first draft (the builder prefills from it), so printing both
-// would say everything twice. Rendered résumés drop the note for any peak
-// that has bullets — which also lets its repeat ascents fold, since the
-// entries no longer differ. The logbook itself always keeps its notes.
-function supersedeNotes(ascents, highlights) {
-  if (!highlights) return ascents;
-  return ascents.map((a) => ((highlights[a.mountain.id] || []).length ? { ...a, note: "" } : a));
+// What actually prints under a peak on the résumé — and exactly what the
+// builder's highlight field shows, so the export never surprises: bullets
+// saved in the builder, or failing that the climb notes they started from.
+function resumeBullets(highlights, id) {
+  return (highlights[id] || []).length ? highlights[id] : noteDraft(id);
 }
 
 function listProgress(list) {
@@ -644,24 +634,22 @@ function ringCard(list, p, interactive = true) {
 // Every ascent grouped by year, newest year first — the shared "logbook by
 // year" layout used on both the dashboard and the shared-profile resume.
 // `interactive` makes each row open the peak's detail modal (dashboard only;
-// the resume is read-only). `highlights` ({ [mountainId]: [bullet] }) renders
-// a mountain's résumé bullets under its most recent ascent (resume only).
-// `fold` collapses same-note repeat ascents (see foldRepeatAscents) — the
-// resume does this; the dashboard logbook keeps one row per ascent.
-function ascentsByYearHTML(ascents, interactive = false, highlights = null, fold = false) {
-  const src = supersedeNotes(ascents, highlights); // a no-op without highlights, i.e. on the dashboard
-  const entries = fold ? foldRepeatAscents(src) : src.map((a) => ({ ...a, dates: [a.date] }));
+// the resume is read-only). `highlights` ({ [mountainId]: [bullet] }) puts
+// the layout in résumé mode: repeat ascents fold into one ×N entry, and each
+// peak shows its resumeBullets — saved bullets or its notes — instead of the
+// dashboard's inline per-ascent note.
+function ascentsByYearHTML(ascents, interactive = false, highlights = null) {
+  const resumeMode = highlights !== null;
+  const entries = resumeMode ? foldRepeatAscents(ascents) : ascents.map((a) => ({ ...a, dates: [a.date] }));
   const byYear = new Map(); // insertion order = date-desc, since allAscents() sorts
   for (const a of entries) {
     const y = a.date.slice(0, 4);
     if (!byYear.has(y)) byYear.set(y, []);
     byYear.get(y).push(a);
   }
-  const seenHl = new Set(); // bullets are per-mountain — show them once, on the newest ascent
   const bulletsFor = (m) => {
-    if (!highlights || seenHl.has(m.id)) return "";
-    seenHl.add(m.id);
-    const list = highlights[m.id] || [];
+    if (!resumeMode) return "";
+    const list = resumeBullets(highlights, m.id); // folding left one entry per peak, so no repeat guard needed
     if (!list.length) return "";
     return `<ul class="resume-bullets">${list.map((b) => `<li>${esc(b)}</li>`).join("")}</ul>`;
   };
@@ -674,7 +662,7 @@ function ascentsByYearHTML(ascents, interactive = false, highlights = null, fold
             <div class="timeline-flag">${a.mountain.flag}</div>
             <div class="timeline-body">
               <div class="timeline-name">${esc(a.mountain.name)}${a.dates.length > 1 ? ` <span class="ascent-times">×${a.dates.length}</span>` : ""}</div>
-              <div class="timeline-meta">${esc(a.mountain.range)} · ${esc(a.mountain.country)}${a.note ? ` — <em>${esc(a.note)}</em>` : ""}</div>
+              <div class="timeline-meta">${esc(a.mountain.range)} · ${esc(a.mountain.country)}${!resumeMode && a.note ? ` — <em>${esc(a.note)}</em>` : ""}</div>
               ${bulletsFor(a.mountain)}
             </div>
             <div class="resume-ascent-right">
@@ -1577,17 +1565,22 @@ function openResumeBuilder() {
         <div>
           <label>Expedition highlights <span style="font-weight:400">(one bullet per line)</span></label>
           <div class="hl-list">
-            ${peaks.map((m) => `
+            ${peaks.map((m) => {
+              // The header row and field mirror the résumé exactly: the same
+              // ×N-and-dates the peak's folded entry will carry, and — via
+              // resumeBullets — the same bullets it will print (saved ones,
+              // or the climb notes they start from). What you see is what
+              // exports.
+              const dates = (state.climbs[m.id] || []).map((a) => a.date).sort((x, y) => y.localeCompare(x));
+              return `
               <div class="hl-row">
-                <div class="hl-peak"><span>${m.flag}</span> <strong>${esc(m.name)}</strong> <span class="hl-elev">${peakElev(m)}</span></div>
+                <div class="hl-peak"><span>${m.flag}</span> <strong>${esc(m.name)}</strong>${dates.length > 1 ? ` <span class="ascent-times">×${dates.length}</span>` : ""}
+                  <span class="hl-elev">${peakElev(m)}</span>
+                  <span class="hl-dates">${dates.map(formatDate).join(" · ")}</span></div>
                 <textarea rows="2" maxlength="1000" data-highlight-id="${esc(m.id)}"
-                  placeholder="Led the rope team on summit day…">${
-                    // A peak with no saved bullets starts from its logbook
-                    // notes, so details already written down aren't retyped —
-                    // once saved, the bullets replace the notes on the résumé.
-                    esc((r.highlights[m.id] || noteDraft(m.id)).join("\n"))
-                  }</textarea>
-              </div>`).join("")}
+                  placeholder="Led the rope team on summit day…">${esc(resumeBullets(r.highlights, m.id).join("\n"))}</textarea>
+              </div>`;
+            }).join("")}
           </div>
         </div>` : ""}
 
@@ -1624,7 +1617,11 @@ function saveResumeBuilder(e, exportAfter) {
   const highlights = { ...state.resume.highlights };
   document.querySelectorAll("[data-highlight-id]").forEach((ta) => {
     const bullets = lines(ta.value);
-    if (bullets.length) highlights[ta.dataset.highlightId] = bullets;
+    // An untouched field still reads exactly as its note draft — leave it
+    // unsaved so it stays live: notes on climbs logged later keep flowing
+    // into the résumé instead of being frozen at today's text.
+    const untouched = JSON.stringify(bullets) === JSON.stringify(noteDraft(ta.dataset.highlightId));
+    if (bullets.length && !untouched) highlights[ta.dataset.highlightId] = bullets;
     else delete highlights[ta.dataset.highlightId];
   });
   state.resume = sanitizeResume({
@@ -1691,24 +1688,18 @@ function buildPrintResume(name, url) {
       ].join("&ensp;·&ensp;")
     : "No ascents logged yet";
 
-  // Same-note repeat ascents print as one ×N entry under the newest date's
-  // year — the ascent count in the header above still counts each one.
+  // Repeat ascents print as one ×N entry under the newest date's year — the
+  // ascent count in the header above still counts each one.
   const byYear = new Map(); // insertion order = date-desc, since allAscents() sorts
-  for (const a of foldRepeatAscents(supersedeNotes(ascents, r.highlights))) {
+  for (const a of foldRepeatAscents(ascents)) {
     const y = a.date.slice(0, 4);
     if (!byYear.has(y)) byYear.set(y, []);
     byYear.get(y).push(a);
   }
 
-  const seenHl = new Set(); // per-mountain bullets print once, on the newest ascent
   const entryHTML = (a) => {
     const m = a.mountain;
-    const bullets = [];
-    if (a.note) bullets.push(`<li class="pr-note">${esc(a.note)}</li>`);
-    if (!seenHl.has(m.id)) {
-      seenHl.add(m.id);
-      for (const b of r.highlights[m.id] || []) bullets.push(`<li>${esc(b)}</li>`);
-    }
+    const bullets = resumeBullets(r.highlights, m.id); // folding left one entry per peak
     return `
       <div class="pr-entry">
         <div class="pr-entry-head">
@@ -1716,7 +1707,7 @@ function buildPrintResume(name, url) {
           <span class="pr-peak-meta">${metaLine(peakElev(m), m.range, m.country)}</span>
           <span class="pr-date">${a.dates.map((d) => `<span class="pr-d">${formatDate(d)}</span>`).join(" · ")}</span>
         </div>
-        ${bullets.length ? `<ul class="pr-bullets">${bullets.join("")}</ul>` : ""}
+        ${bullets.length ? `<ul class="pr-bullets">${bullets.map((b) => `<li>${esc(b)}</li>`).join("")}</ul>` : ""}
       </div>`;
   };
 
@@ -1788,8 +1779,8 @@ const DEMO_CLIMBS = {
   fuji: [{ date: "2022-08-27", note: "Yoshida trail, sunrise summit" }],
   toubkal: [{ date: "2022-10-08", note: "" }],
   rainier: [{ date: "2023-07-15", note: "Disappointment Cleaver" }],
-  // Two same-note ascents on purpose: they show the resume folding repeat
-  // climbs into one "×2" entry.
+  // A repeat ascent on purpose: it shows the résumé folding repeat climbs
+  // into one "×2" entry.
   hood: [
     { date: "2025-04-19", note: "South side, early start" },
     { date: "2023-05-21", note: "South side, early start" },
@@ -2169,7 +2160,7 @@ function renderResume(profile) {
 
     <div class="dash-section">
       <div class="dash-section-title">All ascents</div>
-      ${ascentsByYearHTML(ascents, false, state.resume.highlights, true)}
+      ${ascentsByYearHTML(ascents, false, state.resume.highlights)}
     </div>
 
     <footer class="resume-footer">

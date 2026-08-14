@@ -1275,12 +1275,15 @@ body.share-mode .feedback-btn-floating { display: none; }
 .hl-peak {
   display: flex;
   align-items: baseline;
-  gap: 7px;
+  flex-wrap: wrap; /* many ascent dates wrap under the name */
+  gap: 3px 7px;
   font-size: 13px;
   margin-bottom: 6px;
 }
 .hl-peak strong { font-weight: 650; }
 .hl-elev { color: var(--text-tertiary); font-size: 12px; }
+/* Every ascent date, mirroring the ×N entry the résumé prints for the peak */
+.hl-dates { color: var(--text-tertiary); font-size: 12px; margin-left: auto; }
 .hl-row textarea { min-height: 54px; }
 
 .resume-actions { display: flex; gap: 10px; margin-top: 4px; }
@@ -1494,7 +1497,6 @@ body.share-mode .feedback-btn-floating { display: none; }
 #print-resume .pr-date .pr-d { white-space: nowrap; }
 #print-resume .pr-bullets { margin: 2pt 0 0; padding-left: 14pt; }
 #print-resume .pr-bullets li { margin: 1.5pt 0; font-size: 9.8pt; }
-#print-resume .pr-note { font-style: italic; }
 #print-resume .pr-empty { color: #4a4f57; font-style: italic; }
 
 #print-resume .pr-foot {
