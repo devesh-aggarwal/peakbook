@@ -27,7 +27,8 @@ Then open http://localhost:8420.
 
 - `index.html`: page structure, navigation, modal & toast containers
 - `css/style.css`: the design system (alpine-night dark theme, alpenglow accent, Fraunces + Inter type)
-- `js/data.js`: mountain dataset and curated peak lists
+- `js/data.js`: core mountain dataset and curated peak lists
+- `js/data-world.js`: worldwide expansion pack (1,000+ more peaks, country by country); loads after `data.js` and appends to `MOUNTAINS`
 - `js/app.js`: state, rendering, map, and logbook logic
 
 ## Notes
