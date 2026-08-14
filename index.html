@@ -204,6 +204,11 @@
 
   </div>
 
+  <!-- ===== Feedback (opens a pre-filled GitHub issue) ===== -->
+  <button class="feedback-fab" id="btn-feedback" onclick="openFeedback()" title="Report a bug or share an idea" aria-label="Report a bug or share an idea">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg>
+  </button>
+
   <!-- ===== Modal ===== -->
   <div class="modal-backdrop" id="modal-backdrop" hidden>
     <div class="modal" id="modal" role="dialog" aria-modal="true"></div>
@@ -216,6 +221,7 @@
   <script src="js/data.js"></script>
   <script src="js/firebase-config.js"></script>
   <script src="js/app.js"></script>
+  <script src="js/feedback.js"></script>
   <script type="module" src="js/auth.js"></script>
 </body>
 </html>
