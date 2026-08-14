@@ -274,11 +274,13 @@ function writeResume() {
   }
 }
 
-// Résumé extras are the person's own reference data, like custom peaks: they
-// persist during a demo, but the cloud push is skipped so the sample stays put.
+// Demo mode swaps in a sample résumé (see DEMO_RESUME), so edits made while
+// it's on screen stay in memory only — nothing touches storage or the cloud,
+// and the real résumé comes back untouched when the demo is exited.
 function saveResume() {
+  if (state.demo) return;
   writeResume();
-  if (!state.demo) pushCloud();
+  pushCloud();
 }
 
 state.resume = loadResume();
@@ -1473,21 +1475,19 @@ function certRowHTML(c = { name: "", org: "", year: "" }) {
 }
 
 function openResumeBuilder() {
-  if (state.demo) {
-    toast("You're viewing demo data — exit the demo to build your résumé");
-    return;
-  }
   state.openPeakId = null;
   state.fromListId = null;
   const r = state.resume;
   const peaks = climbedPeaks().sort((a, b) => b.elevation - a.elevation);
-  const defaultName = r.name || window.peakbookAccountName || "";
+  const defaultName = r.name || (state.demo ? "" : window.peakbookAccountName || "");
 
   openModal(`
     <div class="modal-hero">
       <button class="modal-close" onclick="closeModal()">✕</button>
       <div class="modal-title">Climbing résumé</div>
-      <div class="modal-sub">Skills, courses, and expedition highlights, exported as a clean PDF</div>
+      <div class="modal-sub">${state.demo
+        ? "A sample résumé you can edit and export — nothing here is saved"
+        : "Skills, courses, and expedition highlights, exported as a clean PDF"}</div>
     </div>
     <div class="modal-body">
       <form class="log-form resume-form" onsubmit="saveResumeBuilder(event, false)">
@@ -1521,8 +1521,8 @@ function openResumeBuilder() {
         </div>` : ""}
 
         <div class="resume-actions">
-          <button type="submit" class="secondary-btn">Save</button>
-          <button type="button" class="primary-btn" onclick="saveResumeBuilder(event, true)">Save &amp; export PDF</button>
+          <button type="submit" class="secondary-btn">${state.demo ? "Apply" : "Save"}</button>
+          <button type="button" class="primary-btn" onclick="saveResumeBuilder(event, true)">${state.demo ? "Export PDF" : "Save &amp; export PDF"}</button>
         </div>
       </form>
     </div>`);
@@ -1565,7 +1565,7 @@ function saveResumeBuilder(e, exportAfter) {
   saveResume();
   closeModal();
   if (exportAfter) exportResumePDF();
-  else toast("Résumé saved");
+  else toast(state.demo ? "Sample résumé updated — nothing is saved" : "Résumé saved");
 }
 
 async function exportResumePDF() {
@@ -1575,6 +1575,10 @@ async function exportResumePDF() {
     // being open right now is itself the verification link.
     name = state.sharedName || "A climber";
     url = location.href;
+  } else if (state.demo) {
+    // The sample logbook isn't anybody's record: print it without a
+    // verification link, and never fall back to the signed-in account's name.
+    name = state.resume.name || "A climber";
   } else {
     name = state.resume.name || window.peakbookAccountName || "A climber";
     try {
@@ -1678,7 +1682,7 @@ function buildPrintResume(name, url) {
     </section>
 
     <footer class="pr-foot">
-      <span>Generated ${formatDate(todayISO())} from a Peakbook logbook</span>
+      <span>Generated ${formatDate(todayISO())} from a ${state.demo ? "Peakbook demo logbook — sample data, not a real climbing record" : "Peakbook logbook"}</span>
       <span>peakbook.co</span>
     </footer>`;
 }
@@ -1719,12 +1723,44 @@ const DEMO_CLIMBS = {
   matterhorn: [{ date: "2026-07-12", note: "Hörnli ridge with guide" }],
 };
 
-// Demo mode fills the logbook with a sample so the app can be explored, but
-// it stays in memory only: saveClimbs() is a no-op while it's on, so nothing
-// touches localStorage or the cloud, and signing in never inherits it.
+// The résumé extras the sample logbook can't derive, so "Résumé PDF" produces
+// a complete document in demo mode instead of a header over a list of climbs.
+// Highlights key off the DEMO_CLIMBS ids above.
+const DEMO_RESUME = {
+  name: "Alex Sample",
+  skills: [
+    "Glacier travel & crevasse rescue",
+    "Rope team leadership",
+    "AD alpine routes",
+    "Expedition planning & logistics",
+    "High-altitude acclimatization",
+    "Winter camping",
+  ],
+  certs: [
+    { name: "AIARE 1 — Avalanche Fundamentals", org: "AIARE", year: "2021" },
+    { name: "Wilderness First Responder", org: "NOLS", year: "2023" },
+    { name: "Rock Rescue & Self-Rescue", org: "AMGA", year: "2024" },
+  ],
+  highlights: {
+    matterhorn: ["Hörnli ridge in a 9-hour round trip from the hut", "Led the descent rappels for a party of three"],
+    aconcagua: ["14-day expedition, carried loads to Camp 3 at 5,970 m", "Summited on the first weather window"],
+    "island-peak": ["Fixed the summit headwall line after a night at high camp"],
+    rainier: ["Disappointment Cleaver in a single push from Camp Muir"],
+    orizaba: ["Pre-dawn start on the Jamapa Glacier, North America's third-highest point"],
+    kilimanjaro: ["First 5,000 m summit — six days on the Machame route"],
+  },
+};
+
+// Demo mode fills the logbook and the résumé with a sample so the app can be
+// explored end to end, but it stays in memory only: saveClimbs() and
+// saveResume() are no-ops while it's on, so nothing touches localStorage or
+// the cloud, and signing in never inherits it.
 function seedDemo() {
   state.demo = true;
-  state.climbs = JSON.parse(JSON.stringify(DEMO_CLIMBS)); // edits in demo must not mutate the pristine sample
+  // Copies, not references: edits in demo must not mutate the pristine
+  // samples. sanitizeResume() already rebuilds every array and object it keeps.
+  state.climbs = JSON.parse(JSON.stringify(DEMO_CLIMBS));
+  state.resume = sanitizeResume(DEMO_RESUME);
   render();
   toast("Viewing a demo logbook — nothing is saved");
 }
@@ -1732,6 +1768,7 @@ function seedDemo() {
 function exitDemo() {
   state.demo = false;
   state.climbs = loadClimbs();
+  state.resume = loadResume(); // the visitor's own résumé, untouched by the demo
   render();
   toast("Demo data cleared");
 }
@@ -1871,9 +1908,11 @@ window.peakbookApp = {
   getCustom() {
     return state.custom;
   },
-  // Résumé extras (skills, certs, highlight bullets), same treatment.
+  // Résumé extras (skills, certs, highlight bullets), same treatment — and
+  // the same demo rule as getClimbs(): the sample résumé on screen isn't the
+  // visitor's, so hand back the stored one instead.
   getResume() {
-    return state.resume;
+    return state.demo ? loadResume() : state.resume;
   },
   // Replace the logbook with data arriving from the cloud, then re-render.
   // Does not call saveClimbs(), so it never echoes back to the cloud.
