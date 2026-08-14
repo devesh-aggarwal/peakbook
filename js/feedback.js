@@ -63,6 +63,36 @@ function setFeedbackType(type) {
   });
 }
 
+/* The raw userAgent reads as noise ("Mozilla/5.0 … Safari" on
+   Chrome, with the macOS version frozen at 10_15_7), so reports
+   carry a plain-English summary instead. Match order matters:
+   Chromium browsers all contain "Chrome", and everything
+   contains "Safari", so the more specific tokens go first. */
+function describeBrowser() {
+  const ua = navigator.userAgent;
+  const os =
+    /iPhone|iPod/.test(ua) ? "iOS" :
+    /iPad/.test(ua) ? "iPadOS" :
+    /Android/.test(ua) ? "Android" :
+    /Windows/.test(ua) ? "Windows" :
+    /Macintosh/.test(ua) ? "macOS" :
+    /CrOS/.test(ua) ? "ChromeOS" :
+    /Linux/.test(ua) ? "Linux" : "an unknown OS";
+  const browsers = [
+    ["Edge", /Edg(?:e|iOS|A)?\/(\d+)/],
+    ["Opera", /OPR\/(\d+)/],
+    ["Samsung Internet", /SamsungBrowser\/(\d+)/],
+    ["Firefox", /(?:Firefox|FxiOS)\/(\d+)/],
+    ["Chrome", /(?:Chrome|CriOS)\/(\d+)/],
+    ["Safari", /Version\/(\d+)[.\d]* .*Safari/],
+  ];
+  for (const [name, re] of browsers) {
+    const m = ua.match(re);
+    if (m) return `${name} ${m[1]} on ${os}`;
+  }
+  return `an unrecognized browser on ${os}`;
+}
+
 function submitFeedback(e) {
   e.preventDefault();
   const message = document.getElementById("fb-message").value.trim();
@@ -80,8 +110,9 @@ function submitFeedback(e) {
     `- **Type:** ${t.name}`,
     `- **View:** ${state.view}`,
     `- **Peaks logged:** ${Object.keys(state.climbs).length}`,
-    `- **Screen:** ${window.innerWidth}×${window.innerHeight} @${window.devicePixelRatio || 1}x`,
-    `- **Browser:** ${navigator.userAgent}`,
+    /* "at 2x", not "@2x": GitHub renders @2x as a user mention. */
+    `- **Screen:** ${window.innerWidth}×${window.innerHeight} at ${window.devicePixelRatio || 1}x`,
+    `- **Browser:** ${describeBrowser()}`,
   ].join("\n");
 
   const url = `${FEEDBACK_REPO}/issues/new` +
