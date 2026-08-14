@@ -110,6 +110,14 @@ function pushCloud() {
   }
 }
 
+// Vercel Web Analytics custom events. The script only loads on Vercel
+// deployments, so this is a no-op locally; demo-mode clicks are throwaway
+// previews and would inflate the counts.
+function track(name, data) {
+  if (state.demo) return;
+  if (typeof window.va === "function") window.va("event", { name, data });
+}
+
 // Elevations are stored in metres; this is purely a display preference.
 function loadUnits() {
   try {
@@ -1013,6 +1021,7 @@ function submitClimb(e, id) {
   if (!state.climbs[id]) state.climbs[id] = [];
   state.climbs[id].push({ date, note });
   saveClimbs();
+  track("Peak Logged", { peak: id });
   closeModal();
   render();
   celebrate(id);
@@ -1316,6 +1325,7 @@ function submitCustomPeak(e, editId) {
 
   state.custom[clean.id] = clean;
   saveCustom();
+  if (!editId) track("Custom Peak Added", { continent: clean.continent });
   closeModal();
   render();
   toast(editId ? "Peak updated" : `${clean.name} added to your peaks`);
