@@ -89,7 +89,18 @@ function submitFeedback(e) {
     `&labels=${encodeURIComponent(t.label)}` +
     `&body=${encodeURIComponent(body)}`;
 
-  window.open(url, "_blank", "noopener");
+  /* A synthetic link click, not window.open: passing a feature
+     string like "noopener" makes browsers treat the open as a
+     popup, which blockers silently swallow. A clicked anchor is
+     plain link navigation and always opens the tab. */
+  const link = document.createElement("a");
+  link.href = url;
+  link.target = "_blank";
+  link.rel = "noopener noreferrer";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+
   closeModal();
   toast("Now press “Submit new issue” on GitHub");
 }
