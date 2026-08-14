@@ -32,7 +32,6 @@ function openFeedback() {
     <div class="modal-hero">
       <button class="modal-close" onclick="closeModal()">✕</button>
       <div class="modal-title">Feedback</div>
-      <div class="modal-sub">Spotted a bug, or wishing Peakbook did something it doesn't? Your report becomes a GitHub issue on the project.</div>
     </div>
     <div class="modal-body">
       <form class="log-form" onsubmit="submitFeedback(event)">
@@ -47,10 +46,10 @@ function openFeedback() {
         <div>
           <label for="fb-message">What's up?</label>
           <textarea id="fb-message" rows="5" maxlength="2000" required
-            placeholder="The more detail the better — what happened, or what would you love to see?"></textarea>
+            placeholder="The more detail the better. What happened, or what would you love to see?"></textarea>
         </div>
         <button type="submit" class="primary-btn">Continue on GitHub →</button>
-        <p class="fb-hint">This opens GitHub with your report pre-filled — press "Submit new issue" there to file it (needs a free GitHub account). Only what you write above plus basic app info (view, screen size, browser) is included.</p>
+        <p class="fb-hint">This opens GitHub with your report pre-filled, where you press "Submit new issue" to file it (needs a free GitHub account).</p>
       </form>
     </div>
   `);
@@ -92,5 +91,5 @@ function submitFeedback(e) {
 
   window.open(url, "_blank", "noopener");
   closeModal();
-  toast("Almost there — press “Submit new issue” on GitHub");
+  toast("Now press “Submit new issue” on GitHub");
 }
