@@ -9,10 +9,11 @@
    It talks to the main app (js/app.js) through window.peakbookApp:
      - peakbookApp.getClimbs()        read the current logbook
      - peakbookApp.getCustom()        read this person's own added peaks
-     - peakbookApp.applyRemote(climbs, custom)  push cloud data into the app
+     - peakbookApp.getResume()        read the résumé extras (skills, certs, highlights)
+     - peakbookApp.applyRemote(climbs, custom, resume)  push cloud data into the app
    and exposes:
-     - window.peakbookAuth  { signIn, signOut }           for the buttons
-     - window.peakbookSync  { push(climbs, custom) }      used after local edits
+     - window.peakbookAuth  { signIn, signOut }                for the buttons
+     - window.peakbookSync  { push(climbs, custom, resume) }   used after local edits
    ============================================================ */
 
 const accountAreas = () => document.querySelectorAll(".account-area");
@@ -83,6 +84,7 @@ const GOOGLE_G = `<svg class="g-logo" viewBox="0 0 18 18" aria-hidden="true">
 /* ---------- account UI ---------- */
 
 function renderSignedOut() {
+  window.peakbookAccountName = ""; // the résumé builder prefills from this
   accountAreas().forEach((el) => {
     el.innerHTML = `<button class="google-btn" onclick="peakbookAuth.signIn()">${GOOGLE_G}<span>Sign in with Google</span></button>`;
   });
@@ -90,6 +92,7 @@ function renderSignedOut() {
 
 function renderSignedIn(user) {
   const name = user.displayName || user.email || "Climber";
+  window.peakbookAccountName = user.displayName || "";
   const avatar = user.photoURL
     ? `<img class="account-avatar" src="${escapeHtml(user.photoURL)}" alt="" referrerpolicy="no-referrer" />`
     : `<div class="account-avatar fallback">${escapeHtml(initials(name))}</div>`;
@@ -124,6 +127,44 @@ function mergeClimbs(a, b) {
     if (merged.length) out[id] = merged;
   }
   return out;
+}
+
+// Union of two résumé blobs, local (a) first so its ordering wins. Shapes are
+// only loosely trusted here — app.js sanitizes whatever comes back through
+// applyRemote, this just has to not lose anyone's entries.
+function mergeResume(a, b) {
+  a = a && typeof a === "object" ? a : {};
+  b = b && typeof b === "object" ? b : {};
+  const skills = [];
+  const seenSkill = new Set();
+  for (const s of [...(Array.isArray(a.skills) ? a.skills : []), ...(Array.isArray(b.skills) ? b.skills : [])]) {
+    const v = String(s || "").trim();
+    if (!v || seenSkill.has(v.toLowerCase())) continue;
+    seenSkill.add(v.toLowerCase());
+    skills.push(v);
+  }
+  const certs = [];
+  const seenCert = new Set();
+  for (const c of [...(Array.isArray(a.certs) ? a.certs : []), ...(Array.isArray(b.certs) ? b.certs : [])]) {
+    if (!c || typeof c !== "object" || !c.name) continue;
+    const key = `${c.name}|${c.org || ""}|${c.year || ""}`.toLowerCase();
+    if (seenCert.has(key)) continue;
+    seenCert.add(key);
+    certs.push({ name: c.name, org: c.org || "", year: c.year || "" });
+  }
+  const highlights = {};
+  for (const src of [a.highlights, b.highlights]) {
+    if (!src || typeof src !== "object" || Array.isArray(src)) continue;
+    for (const [id, list] of Object.entries(src)) {
+      if (!Array.isArray(list)) continue;
+      const cur = highlights[id] || [];
+      for (const bullet of list) {
+        if (bullet && typeof bullet === "string" && !cur.includes(bullet)) cur.push(bullet);
+      }
+      if (cur.length) highlights[id] = cur;
+    }
+  }
+  return { name: a.name || b.name || "", skills, certs, highlights };
 }
 
 /* ---------- init ---------- */
@@ -209,16 +250,16 @@ async function init() {
   // Debounced push, called by app.js after every local edit. While the
   // profile is published, the public copy is kept in step with the logbook.
   window.peakbookSync = {
-    push(climbs, customPeaks) {
+    push(climbs, customPeaks, resume) {
       if (!userDocRef || applyingRemote) return;
       clearTimeout(pushTimer);
       pushTimer = setTimeout(() => {
-        const payload = { climbs, customPeaks: customPeaks || {}, updatedAt: Date.now() };
+        const payload = { climbs, customPeaks: customPeaks || {}, resume: resume || {}, updatedAt: Date.now() };
         // mergeFields, not merge: merge deep-merges the climbs map, so a peak
         // deleted locally would survive in the cloud and echo straight back
         // through onSnapshot. mergeFields replaces the field wholesale while
         // still leaving the rest of the document (e.g. `shared`) untouched.
-        const fields = ["climbs", "customPeaks", "updatedAt"];
+        const fields = ["climbs", "customPeaks", "resume", "updatedAt"];
         setDoc(userDocRef, payload, { mergeFields: fields }).catch((e) =>
           console.error("Peakbook: cloud save failed", e)
         );
@@ -238,11 +279,13 @@ async function init() {
     if (!user || !profileDocRef) throw new Error("not signed in");
     const climbs = window.peakbookApp ? window.peakbookApp.getClimbs() : {};
     const customPeaks = window.peakbookApp ? window.peakbookApp.getCustom() : {};
+    const resume = window.peakbookApp && window.peakbookApp.getResume ? window.peakbookApp.getResume() : {};
     await setDoc(profileDocRef, {
       name: user.displayName || "",
       photoURL: user.photoURL || "",
       climbs,
       customPeaks,
+      resume,
       updatedAt: Date.now(),
     });
     await setDoc(userDocRef, { shared: true }, { merge: true });
@@ -283,13 +326,16 @@ async function init() {
     // so nothing logged while signed out is lost.
     const local = window.peakbookApp ? window.peakbookApp.getClimbs() : {};
     const localCustom = window.peakbookApp ? window.peakbookApp.getCustom() : {};
+    const localResume = window.peakbookApp && window.peakbookApp.getResume ? window.peakbookApp.getResume() : {};
     let remote = {};
     let remoteCustom = {};
+    let remoteResume = {};
     try {
       const snap = await getDoc(userDocRef);
       if (snap.exists()) {
         remote = snap.data().climbs || {};
         remoteCustom = snap.data().customPeaks || {};
+        remoteResume = snap.data().resume || {};
         share.shared = snap.data().shared === true;
       }
     } catch (e) {
@@ -302,15 +348,19 @@ async function init() {
     // the union keeps peaks added on any device. Local wins a tie, which is
     // what an edit made here before signing in should do.
     const mergedCustom = { ...remoteCustom, ...localCustom };
+    // Résumé extras union the same way: skills, certs and bullets written on
+    // any device all survive, local ordering first.
+    const mergedResume = mergeResume(localResume, remoteResume);
     const changed =
       JSON.stringify(merged) !== JSON.stringify(remote) ||
-      JSON.stringify(mergedCustom) !== JSON.stringify(remoteCustom);
+      JSON.stringify(mergedCustom) !== JSON.stringify(remoteCustom) ||
+      JSON.stringify(mergedResume) !== JSON.stringify(remoteResume);
     if (changed) {
       try {
         await setDoc(
           userDocRef,
-          { climbs: merged, customPeaks: mergedCustom, updatedAt: Date.now() },
-          { mergeFields: ["climbs", "customPeaks", "updatedAt"] }
+          { climbs: merged, customPeaks: mergedCustom, resume: mergedResume, updatedAt: Date.now() },
+          { mergeFields: ["climbs", "customPeaks", "resume", "updatedAt"] }
         );
       } catch (e) {
         console.error("Peakbook: could not seed cloud logbook", e);
@@ -321,9 +371,10 @@ async function init() {
     unsubscribe = onSnapshot(userDocRef, (snap) => {
       const data = snap.exists() ? snap.data() : {};
       applyingRemote = true;
-      // `undefined` (not {}) when the field is absent, so the app can tell an
-      // account that predates custom peaks from one with none left.
-      if (window.peakbookApp) window.peakbookApp.applyRemote(data.climbs || {}, data.customPeaks);
+      // `undefined` (not {}) when a field is absent, so the app can tell an
+      // account that predates custom peaks / résumé extras from one with
+      // none left.
+      if (window.peakbookApp) window.peakbookApp.applyRemote(data.climbs || {}, data.customPeaks, data.resume);
       applyingRemote = false;
     });
   });
