@@ -81,6 +81,8 @@ const WORLD_MOUNTAINS = [
   { id: "beerwah", name: "Mount Beerwah", elevation: 556, country: "Australia", flag: "🇦🇺", continent: "Oceania", range: "Glass House Mountains", lat: -26.8917, lng: 152.8767 },
   { id: "tibrogargan", name: "Mount Tibrogargan", elevation: 364, country: "Australia", flag: "🇦🇺", continent: "Oceania", range: "Glass House Mountains", lat: -26.9247, lng: 152.9464 },
   { id: "sonder", name: "Mount Sonder", elevation: 1380, country: "Australia", flag: "🇦🇺", continent: "Oceania", range: "MacDonnell Ranges", lat: -23.5861, lng: 132.5675 },
+  { id: "kata-tjuta", name: "Kata Tjuta (Mount Olga)", elevation: 1066, country: "Australia", flag: "🇦🇺", continent: "Oceania", range: "Central Australia", lat: -25.2965, lng: 130.7352, aka: "The Olgas" },
+  { id: "uluru", name: "Uluru", elevation: 863, country: "Australia", flag: "🇦🇺", continent: "Oceania", range: "Central Australia", lat: -25.3444, lng: 131.0369, firstAscent: 1873, aka: "Ayers Rock" },
 
   // ---- New Guinea & the Pacific ----
   { id: "sumantri", name: "Sumantri", elevation: 4870, country: "Indonesia", flag: "🇮🇩", continent: "Oceania", range: "Sudirman Range", lat: -4.0703, lng: 137.1753 },
@@ -250,6 +252,7 @@ const WORLD_MOUNTAINS = [
   { id: "sierra-blanca", name: "Sierra Blanca Peak", elevation: 3652, country: "United States", flag: "🇺🇸", continent: "North America", range: "Sacramento Mountains", lat: 33.3743, lng: -105.8086 },
   { id: "mount-taylor", name: "Mount Taylor", elevation: 3446, country: "United States", flag: "🇺🇸", continent: "North America", range: "San Mateo Mountains", lat: 35.2387, lng: -107.6084 },
   { id: "sandia", name: "Sandia Crest", elevation: 3255, country: "United States", flag: "🇺🇸", continent: "North America", range: "Sandia Mountains", lat: 35.2101, lng: -106.4498 },
+  { id: "shiprock", name: "Shiprock", elevation: 2187, country: "United States", flag: "🇺🇸", continent: "North America", range: "Navajo Volcanic Field", lat: 36.6875, lng: -108.8365, firstAscent: 1939, aka: "Tsé Bitʼaʼí" },
 
   // ---- Arizona ----
   { id: "graham", name: "Mount Graham", elevation: 3267, country: "United States", flag: "🇺🇸", continent: "North America", range: "Pinaleño Mountains", lat: 32.7017, lng: -109.8714 },
