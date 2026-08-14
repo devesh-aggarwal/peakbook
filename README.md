@@ -13,6 +13,7 @@ A simple website for tracking the mountains you've climbed, inspired by flight-t
 - **Accounts (optional):** Sign in with Google to get an account whose logbook syncs across devices, powered by Firebase. Setup is in [SETUP.md](SETUP.md). Without it, the app runs in local-only mode.
 - **Share your profile:** publish a public "climbing resume" at a shareable link (`?u=<uid>`) — your stats, a map of your summits, list progress, and every ascent by year. It stays in sync as you log climbs, and you can unpublish at any time. Requires the Firebase setup above.
 - **Export / import:** your logbook is stored locally (localStorage) and can be exported to or restored from a JSON file.
+- **Feedback:** a pinned button (bottom-left) opens a short form for bugs, feature ideas, and improvements — it pre-fills a GitHub issue on this repo, so filing is one click from there.
 
 ## Running it
 
@@ -30,6 +31,7 @@ Then open http://localhost:8420.
 - `css/style.css`: the design system (alpine-night dark theme, alpenglow accent, Fraunces + Inter type)
 - `js/data.js`: mountain dataset and curated peak lists
 - `js/app.js`: state, rendering, map, and logbook logic
+- `js/feedback.js`: the feedback form, and the GitHub-issue pre-fill it submits to
 
 ## Notes
 
