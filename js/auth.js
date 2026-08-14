@@ -8,10 +8,11 @@
 
    It talks to the main app (js/app.js) through window.peakbookApp:
      - peakbookApp.getClimbs()        read the current logbook
-     - peakbookApp.applyRemote(data)  push cloud data into the app
+     - peakbookApp.getCustom()        read this person's own added peaks
+     - peakbookApp.applyRemote(climbs, custom)  push cloud data into the app
    and exposes:
-     - window.peakbookAuth  { signIn, signOut }  for the buttons
-     - window.peakbookSync  { push(climbs) }      used after local edits
+     - window.peakbookAuth  { signIn, signOut }           for the buttons
+     - window.peakbookSync  { push(climbs, custom) }      used after local edits
    ============================================================ */
 
 const accountAreas = () => document.querySelectorAll(".account-area");
@@ -208,19 +209,23 @@ async function init() {
   // Debounced push, called by app.js after every local edit. While the
   // profile is published, the public copy is kept in step with the logbook.
   window.peakbookSync = {
-    push(climbs) {
+    push(climbs, customPeaks) {
       if (!userDocRef || applyingRemote) return;
       clearTimeout(pushTimer);
       pushTimer = setTimeout(() => {
+        const payload = { climbs, customPeaks: customPeaks || {}, updatedAt: Date.now() };
         // mergeFields, not merge: merge deep-merges the climbs map, so a peak
         // deleted locally would survive in the cloud and echo straight back
         // through onSnapshot. mergeFields replaces the field wholesale while
         // still leaving the rest of the document (e.g. `shared`) untouched.
-        setDoc(userDocRef, { climbs, updatedAt: Date.now() }, { mergeFields: ["climbs", "updatedAt"] }).catch((e) =>
+        const fields = ["climbs", "customPeaks", "updatedAt"];
+        setDoc(userDocRef, payload, { mergeFields: fields }).catch((e) =>
           console.error("Peakbook: cloud save failed", e)
         );
+        // The public resume needs the custom peaks too — a visitor's copy of
+        // the app has never heard of them, so their ascents would vanish.
         if (share.shared && profileDocRef) {
-          setDoc(profileDocRef, { climbs, updatedAt: Date.now() }, { mergeFields: ["climbs", "updatedAt"] }).catch((e) =>
+          setDoc(profileDocRef, payload, { mergeFields: fields }).catch((e) =>
             console.error("Peakbook: public profile save failed", e)
           );
         }
@@ -232,10 +237,12 @@ async function init() {
     const user = auth.currentUser;
     if (!user || !profileDocRef) throw new Error("not signed in");
     const climbs = window.peakbookApp ? window.peakbookApp.getClimbs() : {};
+    const customPeaks = window.peakbookApp ? window.peakbookApp.getCustom() : {};
     await setDoc(profileDocRef, {
       name: user.displayName || "",
       photoURL: user.photoURL || "",
       climbs,
+      customPeaks,
       updatedAt: Date.now(),
     });
     await setDoc(userDocRef, { shared: true }, { merge: true });
@@ -275,11 +282,14 @@ async function init() {
     // First sign-in on a device: fold any local climbs into the cloud copy
     // so nothing logged while signed out is lost.
     const local = window.peakbookApp ? window.peakbookApp.getClimbs() : {};
+    const localCustom = window.peakbookApp ? window.peakbookApp.getCustom() : {};
     let remote = {};
+    let remoteCustom = {};
     try {
       const snap = await getDoc(userDocRef);
       if (snap.exists()) {
         remote = snap.data().climbs || {};
+        remoteCustom = snap.data().customPeaks || {};
         share.shared = snap.data().shared === true;
       }
     } catch (e) {
@@ -288,9 +298,20 @@ async function init() {
     share._readyResolve();
 
     const merged = mergeClimbs(local, remote);
-    if (JSON.stringify(merged) !== JSON.stringify(remote)) {
+    // Custom peaks are keyed by a random id, so there's nothing to reconcile:
+    // the union keeps peaks added on any device. Local wins a tie, which is
+    // what an edit made here before signing in should do.
+    const mergedCustom = { ...remoteCustom, ...localCustom };
+    const changed =
+      JSON.stringify(merged) !== JSON.stringify(remote) ||
+      JSON.stringify(mergedCustom) !== JSON.stringify(remoteCustom);
+    if (changed) {
       try {
-        await setDoc(userDocRef, { climbs: merged, updatedAt: Date.now() }, { mergeFields: ["climbs", "updatedAt"] });
+        await setDoc(
+          userDocRef,
+          { climbs: merged, customPeaks: mergedCustom, updatedAt: Date.now() },
+          { mergeFields: ["climbs", "customPeaks", "updatedAt"] }
+        );
       } catch (e) {
         console.error("Peakbook: could not seed cloud logbook", e);
       }
@@ -298,9 +319,11 @@ async function init() {
 
     // Live updates: any change on any device flows back here.
     unsubscribe = onSnapshot(userDocRef, (snap) => {
-      const climbs = snap.exists() ? snap.data().climbs || {} : {};
+      const data = snap.exists() ? snap.data() : {};
       applyingRemote = true;
-      if (window.peakbookApp) window.peakbookApp.applyRemote(climbs);
+      // `undefined` (not {}) when the field is absent, so the app can tell an
+      // account that predates custom peaks from one with none left.
+      if (window.peakbookApp) window.peakbookApp.applyRemote(data.climbs || {}, data.customPeaks);
       applyingRemote = false;
     });
   });

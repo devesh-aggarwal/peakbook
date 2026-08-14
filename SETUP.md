@@ -121,6 +121,9 @@ their account and shows up on any device they sign in on.
 - One document per person at `users/{their-uid}` in Firestore.
 - The document holds `{ climbs: { mountainId: [{ date, note }] }, updatedAt }`
   plus a `shared` flag recording whether their profile is published.
+- It also holds `customPeaks: { peakId: { name, elevation, lat, lng, … } }` —
+  peaks that person added themselves. These stay in their own document; there
+  is no shared collection of user-submitted peaks.
 - The same shape is kept in the browser's localStorage as an offline cache, so
   the app still works with no connection and syncs when it's back.
 
@@ -128,7 +131,9 @@ their account and shows up on any device they sign in on.
 
 - **Share profile** (in the sidebar, or **Share** on the dashboard) publishes a
   public copy of the logbook to `profiles/{their-uid}` — `{ name, photoURL,
-  climbs, updatedAt }` — and hands back a link like `https://peakbook.co/?u=<uid>`.
+  climbs, customPeaks, updatedAt }` — and hands back a link like
+  `https://peakbook.co/?u=<uid>`. Any custom peaks travel with it, since a
+  visitor's copy of the app has never heard of them.
 - Opening that link shows a read-only "climbing resume": stats, a map of their
   summits, list progress, and every ascent by year. No sign-in needed to view.
 - While sharing is on, every logged climb also updates the public copy.

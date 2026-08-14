@@ -934,7 +934,7 @@ a.ghost-btn { display: block; text-decoration: none; }
 
 .log-form { display: flex; flex-direction: column; gap: 13px; margin-top: 4px; }
 .log-form label { font-size: 12px; font-weight: 600; color: var(--text-secondary); display: block; margin-bottom: 6px; }
-.log-form input[type="date"], .log-form input[type="text"], .log-form select {
+.log-form input[type="date"], .log-form input[type="text"], .log-form input[type="number"], .log-form select {
   width: 100%;
   background: var(--card);
   border: 1px solid var(--border-strong);
@@ -947,8 +947,10 @@ a.ghost-btn { display: block; text-decoration: none; }
 }
 .log-form input:focus, .log-form select:focus { border-color: rgba(255, 126, 92, 0.55); box-shadow: 0 0 0 3px rgba(255, 126, 92, 0.12); }
 .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.form-hint { font-size: 12px; line-height: 1.5; color: var(--text-tertiary); margin: -4px 0 0; }
 
 .modal .primary-btn { width: 100%; margin-top: 8px; }
+.modal .log-form .secondary-btn { width: 100%; }
 .modal .search-box { border-radius: 12px; }
 
 /* Peak picker */
@@ -964,6 +966,47 @@ a.ghost-btn { display: block; text-decoration: none; }
 .picker-flag { font-size: 19px; }
 .picker-name { font-size: 14px; font-weight: 550; flex: 1; }
 .picker-elev { font-size: 12px; color: var(--text-tertiary); font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* "Add your own peak" escape hatch under the picker results */
+.picker-add {
+  display: flex; align-items: center; gap: 11px;
+  width: 100%;
+  margin-top: 10px;
+  padding: 11px 8px;
+  border: 1px dashed var(--border-strong);
+  border-radius: 11px;
+  background: none;
+  color: var(--text-secondary);
+  font-size: 13.5px;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+.picker-add:hover { border-color: rgba(255, 126, 92, 0.5); color: var(--text); background: rgba(255, 126, 92, 0.05); }
+.picker-add strong { font-weight: 650; color: var(--accent); }
+.picker-add-icon {
+  display: flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; flex-shrink: 0;
+  border-radius: 8px;
+  background: rgba(255, 126, 92, 0.14);
+  color: var(--accent);
+  font-size: 16px; font-weight: 600; line-height: 1;
+}
+
+/* "Your own peak" panel in the peak modal */
+.custom-peak-panel {
+  display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap;
+  margin-top: 18px;
+  padding: 13px 15px;
+  border: 1px solid var(--border-strong);
+  border-radius: 13px;
+  background: rgba(213, 221, 235, 0.03);
+}
+.custom-peak-copy { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.custom-peak-copy strong { font-size: 13px; font-weight: 650; }
+.custom-peak-copy span { font-size: 12px; line-height: 1.45; color: var(--text-tertiary); }
+.custom-peak-actions { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+.custom-peak-actions .secondary-btn { padding: 7px 13px; font-size: 12.5px; }
 
 /* ============ Header actions ============ */
 
