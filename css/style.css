@@ -452,6 +452,8 @@ a.ghost-btn { display: block; text-decoration: none; }
 .timeline-flag { font-size: 20px; width: 30px; text-align: center; flex-shrink: 0; padding-top: 2px; }
 .timeline-body { flex: 1; min-width: 0; }
 .timeline-name { font-size: 14px; font-weight: 600; }
+/* Repeat-ascent count on a folded resume entry ("Mount Hood ×3") */
+.ascent-times { font-size: 12px; font-weight: 600; color: var(--text-tertiary); }
 .timeline-meta { font-size: 12px; color: var(--text-secondary); margin-top: 2.5px; }
 .timeline-elev {
   font-size: 12.5px; font-weight: 600; color: var(--text-tertiary);
@@ -1273,12 +1275,15 @@ body.share-mode .feedback-btn-floating { display: none; }
 .hl-peak {
   display: flex;
   align-items: baseline;
-  gap: 7px;
+  flex-wrap: wrap; /* many ascent dates wrap under the name */
+  gap: 3px 7px;
   font-size: 13px;
   margin-bottom: 6px;
 }
 .hl-peak strong { font-weight: 650; }
 .hl-elev { color: var(--text-tertiary); font-size: 12px; }
+/* Every ascent date, mirroring the ×N entry the résumé prints for the peak */
+.hl-dates { color: var(--text-tertiary); font-size: 12px; margin-left: auto; }
 .hl-row textarea { min-height: 54px; }
 
 .resume-actions { display: flex; gap: 10px; margin-top: 4px; }
@@ -1486,10 +1491,12 @@ body.share-mode .feedback-btn-floating { display: none; }
 #print-resume .pr-entry-head { display: flex; align-items: baseline; gap: 8pt; }
 #print-resume .pr-peak { font-weight: 650; font-size: 10.5pt; }
 #print-resume .pr-peak-meta { color: #4a4f57; font-size: 9pt; }
-#print-resume .pr-date { margin-left: auto; color: #4a4f57; font-size: 9pt; white-space: nowrap; }
+#print-resume .pr-times { font-weight: 600; font-size: 9pt; color: #4a4f57; }
+/* A folded entry can carry many dates: the list wraps, each date stays whole */
+#print-resume .pr-date { margin-left: auto; color: #4a4f57; font-size: 9pt; text-align: right; }
+#print-resume .pr-date .pr-d { white-space: nowrap; }
 #print-resume .pr-bullets { margin: 2pt 0 0; padding-left: 14pt; }
 #print-resume .pr-bullets li { margin: 1.5pt 0; font-size: 9.8pt; }
-#print-resume .pr-note { font-style: italic; }
 #print-resume .pr-empty { color: #4a4f57; font-style: italic; }
 
 #print-resume .pr-foot {
