@@ -1652,7 +1652,6 @@ function buildPrintResume(name, url) {
       <h1>${esc(name)}</h1>
       <div class="pr-role">Climbing Résumé</div>
       <div class="pr-meta">${meta}</div>
-      ${url ? `<div class="pr-verify">Verified live logbook — every climb below is on record at <a href="${esc(url)}">${esc(url)}</a></div>` : ""}
     </header>
 
     ${r.skills.length ? `
@@ -1682,7 +1681,11 @@ function buildPrintResume(name, url) {
     </section>
 
     <footer class="pr-foot">
-      <span>Generated ${formatDate(todayISO())} from a ${state.demo ? "Peakbook demo logbook — sample data, not a real climbing record" : "Peakbook logbook"}</span>
+      <span>Generated ${formatDate(todayISO())} from a ${
+        // The profile link lives here now: the words carry it, so the résumé
+        // stays verifiable without a URL taking up a line of its own.
+        url ? `<a href="${esc(url)}">Peakbook logbook</a>` : "Peakbook logbook"
+      }</span>
       <span>peakbook.co</span>
     </footer>`;
 }

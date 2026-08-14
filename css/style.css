@@ -1338,8 +1338,12 @@ body.share-mode .feedback-btn-floating { display: none; }
   .sidebar { display: none; }
   .main { padding-bottom: 74px; }
   .view { padding: 26px 18px 44px; }
-  .view-header { margin-bottom: 22px; }
+  /* The title and its action buttons can't share a row at phone width —
+     side by side they push the view into a horizontal scroll. Stack them,
+     and let the buttons wrap onto a second row when even that is tight. */
+  .view-header { flex-direction: column; align-items: stretch; gap: 14px; margin-bottom: 22px; }
   .view-header h1 { font-size: 27px; }
+  .header-actions { flex-wrap: wrap; }
   .subtitle { font-size: 14px; }
   .stat-value { font-size: 24px; }
   .account-area-mobile { display: block; margin-bottom: 18px; }
@@ -1458,8 +1462,6 @@ body.share-mode .feedback-btn-floating { display: none; }
   margin-top: 5pt;
 }
 #print-resume .pr-meta { font-size: 9.5pt; color: #4a4f57; margin-top: 7pt; }
-#print-resume .pr-verify { font-size: 9pt; color: #4a4f57; margin-top: 3pt; }
-#print-resume .pr-verify a { color: #b3543a; font-weight: 600; text-decoration: none; }
 
 #print-resume h2 {
   font-size: 9.5pt;
@@ -1500,6 +1502,7 @@ body.share-mode .feedback-btn-floating { display: none; }
   justify-content: space-between;
   gap: 10pt;
 }
+#print-resume .pr-foot a { color: #b3543a; font-weight: 600; text-decoration: none; }
 
 @media print {
   @page { margin: 14mm 15mm; }
